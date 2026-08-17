@@ -127,7 +127,7 @@ Desde el panel podrás:
 - Renombrar una habitación (`display_name`)
 - Agregar o eliminar alias de voz (hasta 5 por nodo)
 
-> 📌 Este frontend está pendiente de rediseño por el equipo. Ver la sección de pendientes en `frontend/PENDIENTES.md` (o el board de Notion del proyecto) para el detalle completo de qué puede y qué no debe cambiarse.
+> 📌 Este frontend está pendiente de rediseño por el equipo. Ver la sección de pendientes en el Notion del proyecto (se encuentra en la tarea principal "Sistema de navegación") para el detalle completo de qué puede y qué no debe cambiarse.
 
 ---
 
