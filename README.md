@@ -20,7 +20,7 @@ Este microservicio expone una API REST (FastAPI + SQLite) consumida por tres cli
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/<usuario>/it_nav_system.git
+git clone https://github.com/Gadex1506/it_nav_system.git
 cd it_nav_system
 ```
 
