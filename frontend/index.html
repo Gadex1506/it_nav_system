@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>INCLUSIVE TECH - Panel de Navegación</title>
+        <link rel="stylesheet" href="css/styles.css">
+    </head>
+    <body>
+
+        <header>
+            <h1>Panel de Configuración - NOVA</h1>
+            <p class="subtitle">
+                Personaliza los nombres y alias de voz de la casa.
+                (Versión funcional mínima - pendiente de diseño final)
+            </p>
+        </header>
+
+        <!--Area de mensajes: Errores o confirmaciones se muestran aqui-->
+        <div id="message-area" class="message-area hidden">
+
+        </div>
+
+        <main>
+            <!-- Seccion 1: Lista de nodos disponibles de la casa -->
+            <section id="nodes-section">
+                <h2>Habitaciones y puntos de navegación</h2>
+                <div id="nodes-list" class="nodes-list">
+                    <p class="loading-text">Cargando nodos...</p>
+                </div>
+            </section>
+
+            <!-- Seccion 2: Panel de edicion (oculto hasta seleccionar un nodo disponible de la casa) -->
+            <section id="edit-section" class="hidden">
+                <h2>Editar nodo</h2>
+
+                <div class="node-detail">
+                    <p><strong>Nombre interno (no editable):</strong> <span id="detail-internal-name"></span></p>
+                    <p><strong>Tipo:</strong> <span id="detail-node-type"></span></p>
+                </div>
+
+                <!-- Formulario para cambiar el nombre visible -->
+                <form id="rename-form">
+                    <label for="display-name-input">Nombre visible:</label>
+                    <input type="text" id="display-name-input" required maxlength="100">
+                    <button type="submit">Guardar nombre</button>
+                </form>
+
+                <!-- Lista y gestion de alias de voz para agregar alias de voz -->
+                <div class="aliases-section">
+                    <h3>Alias de voz (máximo 5)</h3>
+                    <ul id="aliases-list" class="aliases-list"></ul>
+
+                    <form id="add-alias-form">
+                        <label for="alias-input">Nuevo alias:</label>
+                        <input type="text" id="alias-input" maxlength="50" placeholder="Ej. Cuarto, mi sala...">
+                        <button type="submit">Agregar alias</button>
+                    </form>
+                </div>
+
+                <button id="close-edit-btn" class="secondary-btn">Cerrar edición</button>
+            </section>
+        </main>
+
+        <footer>
+            <p>INCLUSIVE TECH - Sistema de Navegación Domótica</p>
+        </footer>
+
+        <!-- Orden de carga: api.js primero (no depende de nada),
+            app.js despues (usa las funciones de api.js)-->
+        <script src="js/api.js"></script>
+        <script src="js/app.js"></script>
+    </body>
+</html>
