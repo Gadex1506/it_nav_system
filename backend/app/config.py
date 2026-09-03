@@ -13,7 +13,7 @@ Principio SOLID aplicado:
 """
 
 # ─── Asistente de voz ────────────────────────────────────────────
-ASSISTANT_NAME: str = "NOVA"
+ASSISTANT_NAME: str = "emma"
 
 # ─── Base de datos ───────────────────────────────────────────────
 DATABASE_NAME: str = "inclusivetech_navigation.db"
