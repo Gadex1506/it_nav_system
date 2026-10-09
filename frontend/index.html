@@ -1,74 +1,146 @@
 <!DOCTYPE html>
+<!--
+    Inclusive Tech - Panel de administración (pestania Hogar: plano)
+    Solo estructura. Los estilos se encuentran en css/styles.css, el comportamiento en js/*.js.
+    Los scripts son etiquetas <script> clasicas (sin modulos ES), por lo que la pagina funciona cuando
+    se abre directamente desde el disco (file://).
+-->
 <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>INCLUSIVE TECH - Panel de Navegación</title>
-        <link rel="stylesheet" href="css/styles.css">
-    </head>
-    <body>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>Inclusive Tech · Panel de zonas</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+	<header class="topbar">
+		<div class="brand">
+			<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#1b2a41" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 22 20 9l12 13v12H8z" fill="#e3b23c" transform="translate(2 2)" stroke="none"/>
+                <path d="M6 20 18 7l12 13v12H6zM15 32V22h6v10"/>
+            </svg>
+			<div><b>Inclusive Tech</b><small>Panel de zonas</small></div>
+		</div>
+		<nav aria-label="Principal">
+			<a href="#" data-tab="home" aria-current="page">Hogar</a>
+			<a href="#" data-tab="users">Usuarios</a>
+			<a href="#" data-tab="settings">Configuración</a>
+			<a href="#" data-tab="help">Ayuda</a>
+		</nav>
+	</header>
 
-        <header>
-            <h1>Panel de Configuración - NOVA</h1>
-            <p class="subtitle">
-                Personaliza los nombres y alias de voz de la casa.
-                (Versión funcional mínima - pendiente de diseño final)
-            </p>
-        </header>
+	<div id="banner" class="banner" role="alert" hidden>
+		<span id="bannerText"></span>
+		<button id="bannerRetry" type="button">Reintentar</button>
+	</div>
 
-        <!--Area de mensajes: Errores o confirmaciones se muestran aqui-->
-        <div id="message-area" class="message-area hidden">
+	<main id="stage">
+		<div id="side" aria-hidden="true">
+			<p id="hint">← Elige una zona del plano para editarla aquí</p>
+		</div>
 
-        </div>
+		<div id="stamp" role="status" aria-live="polite">
+			<span id="stampIcon">✓</span> <span id="stampText">Sin cambios pendientes</span>
+		</div>
 
-        <main>
-            <!-- Seccion 1: Lista de nodos disponibles de la casa -->
-            <section id="nodes-section">
-                <h2>Habitaciones y puntos de navegación</h2>
-                <div id="nodes-list" class="nodes-list">
-                    <p class="loading-text">Cargando nodos...</p>
-                </div>
-            </section>
+		<div id="area">
+			<div id="view">
+				<svg id="plan" viewBox="30 100 1430 850" role="group" aria-label="Plano de planta de la casa, vista desde arriba">
+            <defs>
+                <filter id="rough" x="-2%" y="-2%" width="104%" height="104%">
+                <feTurbulence type="fractalNoise" baseFrequency=".02" numOctaves="2" seed="4"/>
+                <feDisplacementMap in="SourceGraphic" scale="5"/>
+                </filter>
+                <pattern id="hatch" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="16" stroke="#1b2a41" stroke-width="2.2" opacity=".35"/>
+                </pattern>
+            </defs>
+            <g id="layer-fill"></g>
+            <g id="layer-furniture" filter="url(#rough)"></g>
+            <g id="layer-walls" filter="url(#rough)" fill="none" stroke="#1b2a41" stroke-linecap="round" stroke-linejoin="miter"></g>
+            <g id="layer-selection" filter="url(#rough)"></g>
+            <g id="layer-hit"></g>
+            <g id="layer-labels"></g>
+            <g id="layer-doors"></g>
+        </svg>
+			</div>
+		</div>
 
-            <!-- Seccion 2: Panel de edicion (oculto hasta seleccionar un nodo disponible de la casa) -->
-            <section id="edit-section" class="hidden">
-                <h2>Editar nodo</h2>
+		<div id="bottom">
+			<div id="searchWrap">
+				<div id="searchNote" role="status" hidden></div>
+				<ul id="suggestions" hidden></ul>
+				<form id="searchForm" role="search">
+					<input id="searchInput" type="search" placeholder="Buscar zona…" aria-label="Buscar zona por nombre o alias" autocomplete="off">
+					<button type="submit">Buscar</button>
+				</form>
+			</div>
+			<div id="controls">
+				<button id="zoomOut" type="button" aria-label="Alejar">−</button>
+				<span id="zoomLabel">100%</span>
+				<button id="zoomIn" type="button" aria-label="Acercar">+</button>
+				<button id="zoomReset" type="button">Centrar</button>
+				<button id="toggleNames" type="button">Ocultar nombres</button>
+			</div>
+		</div>
 
-                <div class="node-detail">
-                    <p><strong>Nombre interno (no editable):</strong> <span id="detail-internal-name"></span></p>
-                    <p><strong>Tipo:</strong> <span id="detail-node-type"></span></p>
-                </div>
+		<svg id="overlay" aria-hidden="true">
+        <defs>
+            <mask id="connectorMask" maskUnits="userSpaceOnUse" x="0" y="0" width="3000" height="2000">
+            <path id="connectorMaskPath" pathLength="1" stroke="#fff" stroke-width="10" fill="none"/>
+            </mask>
+        </defs>
+        <path id="connectorLine" mask="url(#connectorMask)" fill="none" stroke="#1b2a41" stroke-width="3.4" stroke-dasharray="0.1 9" stroke-linecap="round"/>
+        <g id="pinStart"><circle r="9" fill="#c4452f" stroke="#1b2a41" stroke-width="2"/><circle cx="-3" cy="-3" r="3" fill="#f4d9d0"/></g>
+        <circle id="pinEnd" r="5" fill="#fbf6e9" stroke="#1b2a41" stroke-width="2"/>
+    </svg>
 
-                <!-- Formulario para cambiar el nombre visible -->
-                <form id="rename-form">
-                    <label for="display-name-input">Nombre visible:</label>
-                    <input type="text" id="display-name-input" required maxlength="100">
-                    <button type="submit">Guardar nombre</button>
-                </form>
+		<aside id="ficha" aria-label="Ficha de la zona seleccionada">
+			<i id="fichaAnchor"></i>
+			<div class="ficha-head">
+				<span class="ficha-zone">Ficha · Zona <b id="fichaNumber"></b></span>
+				<button class="close-btn" id="fichaClose" type="button" aria-label="Cerrar ficha">×</button>
+			</div>
 
-                <!-- Lista y gestion de alias de voz para agregar alias de voz -->
-                <div class="aliases-section">
-                    <h3>Alias de voz (máximo 5)</h3>
-                    <ul id="aliases-list" class="aliases-list"></ul>
+			<div id="fichaEditable">
+				<section class="sec">
+					<label class="sec-title" for="nameInput">Renombrar zona</label>
+					<input id="nameInput" type="text" maxlength="40" autocomplete="off">
+					<p class="field-error" id="nameError" role="alert" hidden></p>
+				</section>
+				<section class="sec">
+					<span class="sec-title" id="aliasTitle">Alias de voz · <span id="aliasCount">0/5</span></span>
+					<ul id="chips" aria-labelledby="aliasTitle"></ul>
+					<p class="field-error" id="aliasError" role="alert" hidden></p>
+				</section>
+				<section class="sec">
+					<span class="sec-title">Nombre técnico (Unity)</span>
+					<code id="techName" class="tech-name"></code>
+					<p class="note">Solo lectura: lo define el equipo de desarrollo.</p>
+				</section>
+			</div>
 
-                    <form id="add-alias-form">
-                        <label for="alias-input">Nuevo alias:</label>
-                        <input type="text" id="alias-input" maxlength="50" placeholder="Ej. Cuarto, mi sala...">
-                        <button type="submit">Agregar alias</button>
-                    </form>
-                </div>
+			<div id="fichaMissing" hidden>
+				<section class="sec">
+					<span class="sec-title">Zona sin registrar</span>
+					<p id="missingText" class="note"></p>
+					<p class="note" id="missingHint">Para activarla, registra en Unity un nodo de tipo habitación con el nombre técnico:</p>
+					<code id="missingCode" class="tech-name"></code>
+				</section>
+			</div>
+		</aside>
 
-                <button id="close-edit-btn" class="secondary-btn">Cerrar edición</button>
-            </section>
-        </main>
+		<div id="toast" role="status" aria-live="polite" hidden></div>
+	</main>
 
-        <footer>
-            <p>INCLUSIVE TECH - Sistema de Navegación Domótica</p>
-        </footer>
-
-        <!-- Orden de carga: api.js primero (no depende de nada),
-            app.js despues (usa las funciones de api.js)-->
-        <script src="js/api.js"></script>
-        <script src="js/app.js"></script>
-    </body>
+	<script src="js/api.js"></script>
+	<script src="js/plan-data.js"></script>
+	<script src="js/plan-renderer.js"></script>
+	<script src="js/viewport.js"></script>
+	<script src="js/connector.js"></script>
+	<script src="js/app.js"></script>
+</body>
 </html>

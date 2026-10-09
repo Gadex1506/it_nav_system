@@ -1,264 +1,587 @@
 /**
-    * app.js
+    * -----------------------------------------------------------------------------
+    Controlador de la pestania "Hogar". Conecta tres elementos:
+    *   - api.js             -> se comunica con el backend (capa de datos, fachada)
+    *   - PlanRenderer       -> dibuja el plano (vista)
+    *   - Viewport/Connector -> camara y conector decorativo
     *
-    * Capa de presentacion del panel web: conecta los datos que trae
-    * api.js con el HTML de index.html, y maneja las interacciones
-    * del usuario (clics, formularios).
+    * Capa: Presentacion (controlador / mediador). Gestiona el estado de la interfaz de usuario
+    * y es el unico archivo que conoce tanto el backend como la vista.
+    *  
+    * Analogia: el que orquesta la escena. Le dice a los actores (renderer) que mostrar y
+    * recurre al almacen (api.js) cuando es necesario guardar algo. 
     *
-    * Responsabilidad: Renderizar la interfaz y reaccionar a eventos.
-    * NO contiene logica de comunicacion HTTP, eso vive en api.js.
+    * Vinculacion zona <-> nodo: Cada zona del plano enumera los nombres tecnicos que acepta
+    * (PlanData.ZONES[].internalNames). El primer nodo de tipo ROOM del backend cuyo
+    * "internal_name" normalizado coincida se vincula a la zona. Las zonas sin nodo
+    * asociado se muestran como "SIN REGISTRAR" y son de solo lectura. 
     *
-    * Nota para el equipo:
-    *   Este archivo SI esta pensado para ser reescrito por completo
-    *   al migrar a un framework si asi lo requieren. La logica de "que hacer" se mantiene,
-    *   pero el "como" (manipulación directa del DOM) cambia totalmente
-    *   en React, Angular o Vue.
+    * Las luces no se gestionan aqui deliberadamente: El backend no dispone de
+    * endpoints para luces.
 */
+(() => {
+	"use strict";
 
+	// --- Constantes -------------------------------------------
+	const MAX_ALIASES = 5; // Debe coincidir con la regla del backend
+	const MAX_NAME_LENGTH = 40;
+	const SAVED_MESSAGE_MS = 2400;
+	const TOAST_MS = 3500;
+	const NOTE_MS = 7000;
+	const MAX_SUGGESTIONS = 5;
+	const SUGGESTION_BLUR_DELAY_MS = 150;
+	const SMALL_SCREEN_QUERY = "(max-width: 1100px)";
+	const NODE_TYPE_ROOM = "room";
+	const COMING_SOON = {
+		users: "Usuarios",
+		settings: "Configuración",
+		help: "Ayuda"
+	};
 
-// ------ Bloque 1 - Estado, utilidades de mensajes, y carga inicial de nodos --------------
+	const $ = (id) => document.getElementById(id);
 
-// Estado minimo en memoria
-// Guarda el ID del nodo que el usuario esta editando actualmente.
-// Es null cuando no hay ningun nodo seleccionado
-// Usando React por ejemplo, esto cambiaria a un useState
-let currentNodeId = null;
+	// --- Estados -----------------------------------------------------------------------
+	/** zoneId -> { definition, node|null, isRenaming } */
+	const zones = new Map();
+	let selectedId = null;
+	let allNodes = [];
 
-// Referencias a elementos del DOM (se buscan una sola vez)
-const nodesListEl = document.getElementById("nodes-list");
-const editSectionEl = document.getElementById("edit-section");
-const messageAreaEl = document.getElementById("message-area");
-const detailInternalNameEl = document.getElementById("detail-internal-name");
-const detailNodeTypeEl = document.getElementById("detail-node-type");
-const displayNameInputEl = document.getElementById("display-name-input");
-const aliasesListEl = document.getElementById("aliases-list");
-const renameFormEl = document.getElementById("rename-form");
-const addAliasFormEl = document.getElementById("add-alias-form");
-const aliasInputEl = document.getElementById("alias-input");
-const closeEditBtnEl = document.getElementById("close-edit-btn");
+	// --- Referencias del DOM -----------------------------------------------------------
+	const dom = {
+		stage: $("stage"),
+		area: $("area"),
+		view: $("view"),
+		plan: $("plan"),
+		ficha: $("ficha"),
+		fichaAnchor: $("fichaAnchor"),
+		fichaNumber: $("fichaNumber"),
+		fichaEditable: $("fichaEditable"),
+		fichaMissing: $("fichaMissing"),
+		nameInput: $("nameInput"),
+		nameError: $("nameError"),
+		chips: $("chips"),
+		aliasCount: $("aliasCount"),
+		aliasError: $("aliasError"),
+		techName: $("techName"),
+		missingText: $("missingText"),
+		missingCode: $("missingCode"),
+	};
 
-/**
-    * Muestra un mensaje al usuario en el area de mensajes,
-    * ya sea de exito o de error, y lo oculta automaticamente
-    * despues de unos segundos.
-    *
-    * @param {string} text - Texto del mensaje a mostrar.
-    * @param {"success"|"error"} type - Tipo de mensaje, define el color.
-*/
-function showMessage(text, type) {
-    messageAreaEl.textContent = text;
-    messageAreaEl.className = `message-area ${type}`; // quita "hidden", agrega el tipo
+	// ============================================================================
+	// Pequenias ayudas de utilidad (normalizacion de nombres, busqueda, etc.)
+	// ============================================================================
 
-    // Oculta el mensaje automaticamente despues de 4 segundos
-    setTimeout(() => {
-        messageAreaEl.classList.add("hidden");
-    }, 4000);
-}
+	/** "Baño " -> "BANO": Eliminar acentos, quitar caracteres no alfanumericos, convertir a mayusculas. */
+	function normalizeTechnicalName(value) {
+		return String(value || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+			.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+	}
 
-/**
-    * Carga todos los nodos desde el backend y los renderiza
-    * en la lista principal. Se llama al iniciar la pagina y
-    * despues de cualquier cambio que afecte la lista (por ejemplo renombrar).
-*/
-async function loadNodes() {
-    try {
-        const nodes = await fetchNodes();
-        renderNodesList(nodes);
-    } catch (error) {
-        nodesListEl.innerHTML = "";
-        showMessage(`No se pudieron cargar los nodos: ${error.message}`, "error");
-    }
-}
+	/** Texto en minusculas y sin acentos para busquedas. */
+	function normalizeSearch(value) {
+		return String(value || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+			.replace(/[“”"']/g, "").trim();
+	}
 
-/**
-    * Pinta la lista de nodos en el HTML a partir de los datos
-    * recibidos del backend.
-    *
-    * @param {Array} nodes - Lista de nodos con sus alias.
-*/
-function renderNodesList(nodes) {
-    if (nodes.length == 0) {
-        nodesListEl.innerHTML = "<p class='loading-text'>No hay nodos registrados todavía.</p>";
-        return;
-    }
+	const errorText = (error) => (error && error.message) ? error.message : "Error desconocido";
+	const zoneList = () => PlanData.ZONES.map((d) => zones.get(d.id));
+	const isRegistered = (zone) => zone.node !== null;
+	const displayNameOf = (zone) => (zone.node ? zone.node.display_name : zone.definition.defaultName);
+	const aliasesOf = (zone) => (zone.node ? zone.node.aliases : []);
 
-    // Construimos el HTML de cada tarjeta de nodo y lo unimos en un string.
-    // Usamos data-node-id para saber, al hacer clic, que nodo estamos ajustando.
-    nodesListEl.innerHTML = nodes.map(node => `
-        <div class="node-card" data-node-id="${node.id}">
-            <span class="node-name">${node.display_name}</span>
-            <span class="node-type-tag">${node.node_type}</span>
-        </div>
-        `).join("");
+	// ============================================================================
+	// Widgets de comentarios: sello de guardado, notificacion emergente (toast), banner de modo sin conexion.
+	// ============================================================================
 
-    // Agregamos el evento de click a cada tarjeta recien creada
-    document.querySelectorAll(".node-card").forEach(card => {
-        card.addEventListener("click", () => {
-            const nodeId = parseInt(card.dataset.nodeId, 10);
-            openEditPanel(nodeId);
-        });
-    });
-}
+	const SaveIndicator = (() => {
+		const stamp = $("stamp");
+		const text = $("stampText");
+		const icon = $("stampIcon");
+		let timer = null;
 
-// ------ Bloque 2 - Abrir panel de edicion y renderizar alias --------------
+		function pop() {
+			stamp.classList.remove("is-pop");
+			void stamp.offsetWidth;
+			stamp.classList.add("is-pop");
+		}
 
-/**
-    * Abre el panel de edicion para un nodo especifico: consulta su
-    * detalle completo en el backend y lo muestra en la interfaz.
-    *
-    * @param {number} nodeId - ID del nodo a editar.
-*/
-async function openEditPanel(nodeId) {
-    try {
-        const node = await fetchNodeById(nodeId);
+		function set(state, message, glyph) {
+			clearTimeout(timer);
+			stamp.classList.toggle("is-saving", state === "saving");
+			stamp.classList.toggle("is-failed", state === "failed");
+			text.textContent = message;
+			icon.textContent = glyph;
+			if (state !== "saving") pop();
+		}
+		return {
+			saving() {
+				set("saving", "Guardando…", "…");
+			},
+			saved() {
+				set("saved", "Cambios guardados", "✓");
+				timer = setTimeout(() => set("idle", "Sin cambios pendientes", "✓"), SAVED_MESSAGE_MS);
+			},
+			failed() {
+				set("failed", "No se pudo guardar", "!");
+			},
+		};
+	})();
 
-        // Guardamos el ID en el estado para que los formularios
-        // de renombrar y agregar alias sepan sobre que nodo actuar.
-        currentNodeId = node.id;
+	const Toast = (() => {
+		const node = $("toast");
+		let timer = null;
+		return {
+			show(message) {
+				node.textContent = message;
+				node.hidden = false;
+				clearTimeout(timer);
+				timer = setTimeout(() => {
+					node.hidden = true;
+				}, TOAST_MS);
+			},
+		};
+	})();
 
-        detailInternalNameEl.textContent = node.internal_name;
-        detailNodeTypeEl.textContent = node.node_type;
-        displayNameInputEl.value = node.display_name;
+	const Banner = (() => {
+		const node = $("banner");
+		const text = $("bannerText");
+		return {
+			show(message) {
+				text.textContent = message;
+				node.hidden = false;
+			},
+			hide() {
+				node.hidden = true;
+			},
+		};
+	})();
 
-        renderAliasesList(node.aliases);
+	// ============================================================================
+	// Datos: carga y vinculacion de nodos de backend a zonas de existentes en el plano.
+	// ============================================================================
 
-        editSectionEl.classList.remove("hidden");
+	/** Asocia el primer nodo de sala coincidente a cada zona (cada nodo se utiliza una unica vez). */
+	function assignNodesToZones(nodes) {
+		const used = new Set();
+		zones.forEach((zone) => {
+			const match = nodes.find((n) =>
+				n.node_type === NODE_TYPE_ROOM && !used.has(n.id) &&
+				zone.definition.internalNames.includes(normalizeTechnicalName(n.internal_name)));
+			zone.node = match || null;
+			if (match) used.add(match.id);
+		});
+	}
 
-        // Desplaza la vista hacia el panel de edicion, util si la
-        // lista de nodos es larga y el panel queda fuera de vista.
-        editSectionEl.scrollIntoView({ behavior: "smooth" });
+	/** Redibuja la etiqueta de una zona a partir de su estado actual. */
+	function renderZone(zone) {
+		PlanRenderer.updateZone(zone.definition.id, {
+			name: displayNameOf(zone),
+			alias: aliasesOf(zone)[0] ? aliasesOf(zone)[0].alias : "",
+			registered: isRegistered(zone),
+			active: selectedId === zone.definition.id,
+		});
+	}
 
-    } catch (error) {
-        showMessage(`No se pudo abrir el nodo: ${error.message}`, "error");
-    }
-}
+	const renderAllZones = () => zoneList().forEach(renderZone);
 
+	async function loadNodes() {
+		try {
+			allNodes = await fetchNodes();
+			assignNodesToZones(allNodes);
+			Banner.hide();
+		} catch (error) {
+			Banner.show(`No se pudo conectar con el servicio de navegación. ${errorText(error)}`);
+		}
+		renderAllZones();
+		if (selectedId) renderFicha();
+	}
 
-/**
-    * Pinta la lista de alias de un nodo como "pildoras" con boton
-    * de eliminar, dentro del panel de edicion.
-    *
-    * @param {Array} aliases - Lista de alias del nodo actualmente abierto.
-*/
-function renderAliasesList(aliases) {
-    if (aliases.length == 0) {
-        aliasesListEl.innerHTML = "<li style='background:none; border:none; color:#888;'>Sin alias todavía</li>";
-        return;
-    }
+	/** Vuelve a leer un nodo del backend (la fuente de verdad tras un cambio). */
+	async function refreshNode(zone) {
+		zone.node = await fetchNodeById(zone.node.id);
+		renderZone(zone);
+	}
 
-    // Cada <li> lleva el ID del alias en data-alias-id, igual que
-    // hicimos con data-node-id en la lista principal de nodos.
-    aliasesListEl.innerHTML = aliases.map(alias => `
-        <li data-alias-id="${alias.id}">
-            ${alias.alias}
-            <button class="remove-alias-btn" title="Eliminar alias">X</button>
-        </li>
-        `).join("");
+	// ============================================================================
+	// Seleccion + ficha
+	// ============================================================================
 
-    // Conectamos el boton de eliminar de cada pildora recien creada.
-    document.querySelectorAll(".remove-alias-btn").forEach(button => {
-        button.addEventListener("click", async (event) => {
-            const listItem = event.target.closest("li");
-            const aliasId = parseInt(listItem.dataset.aliasId, 10);
-            await handleDeleteAlias(aliasId);
-        });
-    });
-}
+	function stageAnchorPoint() {
+		if (!selectedId || window.matchMedia(SMALL_SCREEN_QUERY).matches) return null;
+		const def = zones.get(selectedId).definition;
+		return Viewport.toStagePoint(def.connectorAnchor, dom.stage);
+	}
 
-/**
-    * Cierra el panel de edicion y limpia el estado actual.
-    * Se llama al presionar el boton "Cerrar edicion".
-*/
-function closeEditPanel() {
-    currentNodeId = null;
-    editSectionEl.classList.add("hidden");
-}
+	function ficheEndPoint() {
+		const s = dom.stage.getBoundingClientRect();
+		const f = dom.fichaAnchor.getBoundingClientRect();
+		return {
+			x: f.left + f.width / 2 - s.left,
+			y: f.top + f.height / 2 - s.top
+		};
+	}
 
-// ------ Bloque 3 - Manejadores de formularios e inicializacion --------------
+	function selectZone(id) {
+		selectedId = id;
+		dom.stage.classList.toggle("has-picked", Boolean(id));
+		PlanRenderer.setSelection(id);
+		renderAllZones();
+		if (id) {
+			renderFicha();
+			dom.ficha.classList.remove("is-visible");
+			void dom.ficha.offsetWidth;
+			dom.ficha.classList.add("is-visible");
+		} else {
+			dom.ficha.classList.remove("is-visible");
+		}
+		Connector.update();
+		Connector.replay();
+		Connector.follow();
 
+        if (id && window.matchMedia(SMALL_SCREEN_QUERY).matches) {
+            dom.ficha.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+	}
 
-/**
-    * Maneja el envio del formulario de renombrar un nodo.
-    * Llama al backend, actualiza la interfaz y refresca la lista
-    * de nodos para reflejar el nuevo nombre.
-    *
-    * @param {Event} event - Evento de submit del formulario.
-*/
-async function handleRenameSubmit(event) {
-    event.preventDefault(); // Evita que el formulario recargue la pagina
+	function renderFicha() {
+		const zone = zones.get(selectedId);
+		if (!zone) return;
+		const index = PlanData.ZONES.indexOf(zone.definition);
+		dom.fichaNumber.textContent = PlanData.formatZoneNumber(index);
+		const registered = isRegistered(zone);
+		dom.fichaEditable.hidden = !registered;
+		dom.fichaMissing.hidden = registered;
+		clearErrors();
+		if (registered) {
+			dom.nameInput.value = zone.node.display_name;
+			dom.techName.textContent = zone.node.internal_name;
+			renderChips();
+		} else {
+			dom.missingText.textContent = `La zona “${zone.definition.defaultName}” aún no existe en el backend, por eso no se puede editar.`;
+			dom.missingCode.textContent = zone.definition.internalNames[0];
+		}
+	}
 
-    const newName = displayNameInputEl.value.trim();
+	function clearErrors() {
+		dom.nameError.hidden = true;
+		dom.aliasError.hidden = true;
+	}
 
-    try {
-        await renameNode(currentNodeId, newName);
-        showMessage("Nombre actualizado correctamente.", "success");
+	function showError(target, message) {
+		target.textContent = message;
+		target.hidden = false;
+	}
 
-        // Refrescamos la lista principal para que el nuevo nombre
-        // se vea reflejado tambien ahi, no solo en el panel de edicion
-        await loadNodes();
+	// ============================================================================
+	// Renombrar nodo
+	// ============================================================================
 
-    } catch (error) {
-        showMessage(`No se pudo renombrar: ${error.message}`, "error");
-    }
-}
+	async function commitRename() {
+		const zone = zones.get(selectedId);
+		if (!zone || !isRegistered(zone) || zone.isRenaming) return;
+		const value = dom.nameInput.value.trim();
+		if (value === zone.node.display_name) {
+			dom.nameError.hidden = true;
+			return;
+		}
+		if (!value) {
+			showError(dom.nameError, "El nombre no puede estar vacío.");
+			dom.nameInput.value = zone.node.display_name;
+			return;
+		}
+		zone.isRenaming = true;
+		SaveIndicator.saving();
+		try {
+			await renameNode(zone.node.id, value);
+			await refreshNode(zone);
+			dom.nameError.hidden = true;
+			SaveIndicator.saved();
+		} catch (error) {
+			SaveIndicator.failed();
+			showError(dom.nameError, errorText(error));
+			dom.nameInput.value = zone.node.display_name;
+		} finally {
+			zone.isRenaming = false;
+			if (zones.get(selectedId) === zone) dom.nameInput.value = zone.node.display_name;
+		}
+	}
 
-/**
-    * Maneja el envio del formulario de agregar un nuevo alias.
-    * Si el backend rechaza el alias (ej. limite de 5 alcanzado),
-    * el mensaje de error exacto del backend se muestra al usuario.
-    *
-    * @param {Event} event - Evento de submit del formulario.
-*/
-async function handleAddAliasSubmit(event) {
-    event.preventDefault();
+	// ============================================================================
+	// Alias nodos
+	// ============================================================================
 
-    const newAlias = aliasInputEl.value.trim();
+	function makeButton(text, label, className, onClick) {
+		const b = document.createElement("button");
+		b.type = "button";
+		b.textContent = text;
+		b.setAttribute("aria-label", label);
+		if (className) b.className = className;
+		b.addEventListener("click", onClick);
+		return b;
+	}
 
-    if (!newAlias) {
-        return; // No enviamos alias vacios
-    }
+	function renderChips(focusAddButton) {
+		const zone = zones.get(selectedId);
+		dom.chips.innerHTML = "";
+		const aliases = aliasesOf(zone);
+		aliases.forEach((alias) => {
+			const li = document.createElement("li");
+			li.className = "chip";
+			const label = document.createElement("span");
+			label.textContent = `“${alias.alias}”`;
+			li.append(label, makeButton("×", `Eliminar alias ${alias.alias}`, "", () => removeAlias(zone, alias)));
+			dom.chips.append(li);
+		});
+		dom.aliasCount.textContent = `${aliases.length}/${MAX_ALIASES}`;
+		if (aliases.length < MAX_ALIASES) {
+			const li = document.createElement("li");
+			const add = makeButton("+", "Agregar alias de voz", "add-chip", () => startAddAlias(zone));
+			li.append(add);
+			dom.chips.append(li);
+			if (focusAddButton) add.focus();
+		}
+	}
 
-    try {
-        await addAliasToNode(currentNodeId, newAlias);
-        showMessage("Alias agregado correctamente.", "success");
+	function startAddAlias(zone) {
+		const addItem = dom.chips.lastChild;
+		const li = document.createElement("li");
+		li.className = "chip";
+		const input = document.createElement("input");
+		input.placeholder = "nuevo alias";
+		input.maxLength = MAX_NAME_LENGTH;
+		input.setAttribute("aria-label", "Nuevo alias de voz");
+		li.append(input);
+		dom.chips.insertBefore(li, addItem);
+		addItem.remove();
+		input.focus();
 
-        aliasInputEl.value = ""; // Limpia el campo de texto
+		let finished = false;
+		const finish = (commit) => {
+			if (finished) return;
+			finished = true;
+			const value = input.value.trim();
+			if (commit && value) addAlias(zone, value);
+			else if (zones.get(selectedId) === zone) renderChips(true);
+		};
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				finish(true);
+			}
+			if (e.key === "Escape") {
+				e.stopPropagation();
+				finish(false);
+			}
+		});
+		input.addEventListener("blur", () => finish(true));
+	}
 
-        // Volvemos a pedir el nodo completo  para refrescar su lista
-        // de alias actualizada (incluyendo el que acabamos de agregar).
-        const updateNode = await fetchNodeById(currentNodeId);
-        renderAliasesList(updateNode.aliases);
+	async function addAlias(zone, value) {
+		SaveIndicator.saving();
+		try {
+			await addAliasToNode(zone.node.id, value);
+			await refreshNode(zone);
+			dom.aliasError.hidden = true;
+			SaveIndicator.saved();
+		} catch (error) {
+			SaveIndicator.failed();
+			showError(dom.aliasError, errorText(error));
+		}
+		if (zones.get(selectedId) === zone) renderChips(true);
+	}
 
-    } catch (error) {
-        showMessage(`No se pudo agregar el alias: ${error.message}`, "error");
-    }
-}
+	async function removeAlias(zone, alias) {
+		SaveIndicator.saving();
+		try {
+			await deleteAliasFromNode(zone.node.id, alias.id);
+			await refreshNode(zone);
+			dom.aliasError.hidden = true;
+			SaveIndicator.saved();
+		} catch (error) {
+			SaveIndicator.failed();
+			showError(dom.aliasError, errorText(error));
+		}
+		if (zones.get(selectedId) === zone) renderChips(true);
+	}
 
-/**
-    * Elimina un alias especifico y refresca la lista de alias
-    * del panel de edicion abierto actualmente.
-    *
-    * @param {number} aliasId - ID del alias a eliminar.
-*/
-async function handleDeleteAlias(aliasId) {
-    try {
-        await deleteAliasFromNode(currentNodeId, aliasId);
-        showMessage("Alias eliminado.", "success");
+	// ============================================================================
+	// Busqueda (por nombre de visualizacion, nombre por defecto o alias)
+	// ============================================================================
 
-        const updateNode = await fetchNodeById(currentNodeId);
-        renderAliasesList(updateNode.aliases);
+	const search = (() => {
+		const form = $("searchForm");
+		const input = $("searchInput");
+		const list = $("suggestions");
+		const note = $("searchNote");
+		let noteTimer = null;
 
-    } catch (error) {
-        showMessage(`No se pudo eliminar el alias: ${error.message}`, "error");
-    }
-}
+		function find(text) {
+			const query = normalizeSearch(text);
+			if (!query) return [];
+			const hits = [];
+			zoneList().forEach((zone) => {
+				const candidates = [{
+						text: displayNameOf(zone),
+						isAlias: false
+					},
+					...aliasesOf(zone).map((a) => ({
+						text: a.alias,
+						isAlias: true
+					}))
+				];
+				let best = null;
+				candidates.forEach((c) => {
+					const n = normalizeSearch(c.text);
+					const score = n === query ? 3 :
+						(n.startsWith(query) || n.split(/[\s/]+/).some((w) => w.startsWith(query))) ? 2 :
+						n.includes(query) ? 1 : 0;
+					if (score && (!best || score > best.score)) best = {
+						zone,
+						text: c.text,
+						isAlias: c.isAlias,
+						score
+					};
+				});
+				if (best) hits.push(best);
+			});
+			return hits.sort((a, b) => b.score - a.score);
+		}
 
-// Registro de eventos principales
-renameFormEl.addEventListener("submit", handleRenameSubmit);
-addAliasFormEl.addEventListener("submit", handleAddAliasSubmit);
-closeEditBtnEl.addEventListener("click", closeEditPanel);
+		function showNote(message) {
+			note.textContent = message;
+			note.hidden = false;
+			clearTimeout(noteTimer);
+			noteTimer = setTimeout(() => {
+				note.hidden = true;
+			}, NOTE_MS);
+		}
 
-// Inicializacion. Se ejecuta apenas el HTML termina de cargar
-document.addEventListener("DOMContentLoaded", () => {
-    loadNodes();
-});
+		function pick(hit, all) {
+			const zone = hit.zone;
+			const id = zone.definition.id;
+			selectZone(id);
+			PlanRenderer.ping(id);
+			if (Viewport.isZoomed()) Viewport.focusOn(PlanRenderer.getZoneCenter(id));
+			const others = all.filter((h) => h.zone !== zone).map((h) => displayNameOf(h.zone));
+			let message = hit.isAlias && normalizeSearch(hit.text) !== normalizeSearch(displayNameOf(zone)) ?
+				`El alias “${hit.text}” es la zona ${displayNameOf(zone)}` : `Zona encontrada: ${displayNameOf(zone)}`;
+			if (others.length) message += ` · también coincide: ${others.join(", ")}`;
+			showNote(message);
+		}
+
+		form.addEventListener("submit", (e) => {
+			e.preventDefault();
+			list.hidden = true;
+			const text = input.value.trim();
+			if (!text) return;
+			const hits = find(text);
+			if (hits.length) pick(hits[0], hits);
+			else showNote(`No encontré una zona con “${text}”. Prueba con un nombre o un alias.`);
+		});
+
+		input.addEventListener("input", () => {
+			note.hidden = true;
+			const hits = find(input.value).slice(0, MAX_SUGGESTIONS);
+			list.innerHTML = "";
+			hits.forEach((hit) => {
+				const li = document.createElement("li");
+				const b = document.createElement("button");
+				b.type = "button";
+				b.textContent = displayNameOf(hit.zone) +
+					(hit.isAlias && normalizeSearch(hit.text) !== normalizeSearch(displayNameOf(hit.zone)) ? ` · alias “${hit.text}”` : "");
+				b.addEventListener("mousedown", (e) => e.preventDefault());
+				b.addEventListener("click", () => {
+					list.hidden = true;
+					input.value = hit.text;
+					pick(hit, hits);
+				});
+				li.append(b);
+				list.append(li);
+			});
+			list.hidden = hits.length === 0;
+		});
+		input.addEventListener("blur", () => setTimeout(() => {
+			list.hidden = true;
+		}, SUGGESTION_BLUR_DELAY_MS));
+	})();
+
+	// ============================================================================
+	// Conexiones e inicio
+	// ============================================================================
+
+	function wireEvents() {
+		dom.nameInput.addEventListener("blur", commitRename);
+		dom.nameInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				dom.nameInput.blur();
+			}
+			if (e.key === "Escape") {
+				e.stopPropagation();
+				const zone = zones.get(selectedId);
+				if (zone && zone.node) dom.nameInput.value = zone.node.display_name;
+				dom.nameInput.blur();
+			}
+		});
+		$("fichaClose").addEventListener("click", () => selectZone(null));
+		document.addEventListener("keydown", (e) => {
+			if (e.key === "Escape" && selectedId && e.target.tagName !== "INPUT") selectZone(null);
+		});
+
+		$("zoomIn").addEventListener("click", Viewport.zoomIn);
+		$("zoomOut").addEventListener("click", Viewport.zoomOut);
+		$("zoomReset").addEventListener("click", Viewport.reset);
+		$("toggleNames").addEventListener("click", (e) => {
+			e.currentTarget.textContent = PlanRenderer.toggleNames() ? "Mostrar nombres" : "Ocultar nombres";
+		});
+
+		$("bannerRetry").addEventListener("click", loadNodes);
+		document.querySelectorAll("nav a").forEach((link) => link.addEventListener("click", (e) => {
+			e.preventDefault();
+			const label = COMING_SOON[link.dataset.tab];
+			if (label) Toast.show(`${label} · próximamente`);
+		}));
+	}
+
+	function init() {
+		PlanData.ZONES.forEach((def) => zones.set(def.id, {
+			definition: def,
+			node: null,
+			isRenaming: false
+		}));
+		PlanRenderer.init({
+			svg: dom.plan,
+			onSelect: selectZone
+		});
+		Connector.init({
+			overlay: $("overlay"),
+			line: $("connectorLine"),
+			mask: $("connectorMaskPath"),
+			pinStart: $("pinStart"),
+			pinEnd: $("pinEnd"),
+			resolveStart: stageAnchorPoint,
+			resolveEnd: () => (selectedId && !window.matchMedia(SMALL_SCREEN_QUERY).matches ? ficheEndPoint() : null),
+			isInside: (p) => {
+				const a = dom.area.getBoundingClientRect();
+				const s = dom.stage.getBoundingClientRect();
+				return p.x > a.left - s.left && p.x < a.right - s.left && p.y > a.top - s.top && p.y < a.bottom - s.top;
+			},
+		});
+		Viewport.init({
+			area: dom.area,
+			view: dom.view,
+			svg: dom.plan,
+			zoomLabel: $("zoomLabel"),
+            controls: $("bottom"),
+			onChange: Connector.update,
+			onBackgroundClick: () => {
+				if (selectedId) selectZone(null);
+			},
+		});
+		renderAllZones();
+		wireEvents();
+		loadNodes();
+	}
+
+	init();
+})();
