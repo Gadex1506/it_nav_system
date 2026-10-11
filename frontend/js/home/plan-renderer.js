@@ -1,12 +1,12 @@
 /**
 	* Dibuja el plano de planta en el SVG y actualiza las etiquetas de las zonas y el estado de seleccion.
 	*
-	* Capa: Presentacion (Vista). No sabe NADA sobre el backend: recibe
-	* "modelos de vista" simples ({ nombre, alias, registrado, activo, numero }).
+	* Capa Presentacion (Vista): No sabe NADA sobre el backend. recibe
+	* modelos de vista sin formato ({ nombre, alias, registrado, activo, numero }).
 	* 
 	* Patron Facade: Sobre la manipulacion del DOM de SVG.
 	* 
-	* Analogia: El dibujante. Dibuja lo que le indican, nunca decide que es cierto.
+	* Analogia: El delineante. Dibuja lo que le indican, nunca decide que es lo correcto.
 */
 const PlanRenderer = (() => {
 	"use strict";
@@ -33,7 +33,7 @@ const PlanRenderer = (() => {
 	let zoneById = {};
 	let order = [];
 
-	/** Crea un elemento SVG con atributos (texto mediante textContent: seguro contra XSS). */
+	/** Crea un elemento SVG con atributos (texto mediante textContent. Seguro frente a XSS) */
 	function el(tag, attrs, parent, text) {
 		const node = document.createElementNS(SVG_NS, tag);
 		Object.keys(attrs || {}).forEach((k) => node.setAttribute(k, attrs[k]));
@@ -42,7 +42,7 @@ const PlanRenderer = (() => {
 		return node;
 	}
 
-	/** Indica que todas las figuras dentro de "group" se “dibujen con tinta” al cargarse. */
+	/** Indica que todas las figuras que se encuentren dentro de "group" se dibujen con tinta al cargarse la pagina */
 	function inkIn(group, delay) {
 		Array.from(group.querySelectorAll("*")).forEach((shape, i) => {
 			shape.classList.add("ink");
@@ -59,7 +59,7 @@ const PlanRenderer = (() => {
 		return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 	}
 
-	/** Divide un nombre largo en dos lineas por el espacio que se encuentra aproximadamente en la mitad. */
+	/** Divide un nombre largo en dos lineas por el espacio que hay aproximadamente en el centro */
 	function splitName(name) {
 		if (name.length <= LABEL_SPLIT_MIN_LENGTH || !name.includes(" ")) return [name];
 		let best = 0;
@@ -74,7 +74,7 @@ const PlanRenderer = (() => {
 		return [name.slice(0, best), name.slice(best + 1)];
 	}
 
-	// --- Dibujo estático ---------------------------------------------------------
+	// --- Dibujo estatico de las puertas y ventanas ---------------------------------------------------------
 
 	function drawWalls() {
 		PlanData.WALLS.forEach((wall, i) => {
@@ -86,7 +86,7 @@ const PlanRenderer = (() => {
 			p.setAttribute("pathLength", 1);
 			p.style.setProperty("--d", `${i * 0.4}s`);
 		});
-		// Las aberturas se "borran" de las paredes con un trazo del color del papel…
+		// Las aberturas se borran de las paredes con un trazo del color del papel…
 		[...PlanData.DOORS, ...PlanData.WINDOWS].forEach(([gap]) => {
 			el("path", {
 				d: gap,
@@ -95,7 +95,7 @@ const PlanRenderer = (() => {
 				"stroke-linecap": "butt",
 			}, layers.walls);
 		});
-		// …y luego se dibujan vidrios de ventana encima.
+		// …y luego se dibujan los vidrios de las ventanas encima (las puertas solo conservan su icono).
 		const doorGroup = el("g", {
 			"stroke-width": PlanData.WINDOW_LINE_WIDTH
 		}, layers.walls);
@@ -138,7 +138,7 @@ const PlanRenderer = (() => {
 					stroke: PAPER_COLOR,
 					"stroke-width": 3
 				}, g);
-				icon.innerHTML = DOOR_GLYPH; // marcado constante, sin datos del usuario
+				icon.innerHTML = DOOR_GLYPH; // codigo fijo, sin datos de usuario
 				el("text", {
 					class: "door-text",
 					x: 48 - w / 2,
@@ -219,7 +219,7 @@ const PlanRenderer = (() => {
 			"stroke-linecap": "round",
 			"stroke-linejoin": "round",
 		}, layers.furniture);
-		furniture.innerHTML = icon.markup; // marcado constante de plan-data.js
+		furniture.innerHTML = icon.markup; // codigo de marcado constante de plan-data.js
 		inkIn(furniture, 0.9 + index * 0.12);
 
 		el("path", {...attrs,
@@ -256,7 +256,7 @@ const PlanRenderer = (() => {
 	// --- API Publica ---------------------------------------------------------------
 
 	/**
-		* Crea el plan completo. "onSelect(zoneId)"" se activa al hacer clic, al presionar la tecla Enter o la barra espaciadora.
+		* Crea el plano completo. La funcion "onSelect(zoneId)"" se activa al hacer clic, al pulsar la tecla Intro o la barra espaciadora.
 		* @param {{svg: SVGElement, onSelect: function(string): void}} options
 	*/
 	function init({
@@ -284,7 +284,7 @@ const PlanRenderer = (() => {
 	}
 
 	/**
-		* Vuelve a dibujar la etiqueta y el texto de accesibilidad de una zona.
+		* Vuelve a dibujar la etiqueta y el texto de accesibilidad de una zona
 		* @param {string} zoneId
 		* @param {{name: string, alias: string, registered: boolean, active: boolean}} model
 	*/
@@ -332,31 +332,31 @@ const PlanRenderer = (() => {
 			`${model.name}, zona ${index + 1}${model.registered ? "" : ", sin registrar"}${model.active ? ", seleccionada" : ""}`);
 	}
 
-	/** Marca una zona como seleccionada o desmarca la seleccion si el valor es nulo. */
+	/** Marca una zona como seleccionada o desmarca la seleccion si el valor es nulo */
 	function setSelection(zoneId) {
 		svg.classList.toggle("has-selection", Boolean(zoneId));
 		svg.querySelectorAll("[data-zone]").forEach((node) => {
-			if (node.classList.contains("zone-label")) return; // labels handled by updateZone
+			if (node.classList.contains("zone-label")) return; // etiquetas gestionadas por updateZone
 			node.classList.toggle("is-picked", node.dataset.zone === zoneId);
 		});
 		svg.querySelectorAll(".zone-hatch").forEach((n) => n.classList.toggle("is-picked", n.dataset.zone === zoneId));
 	}
 
-	/** Pulsa el contorno de seleccion (utilizado por la busqueda). */
+	/** Hace parpadear el contorno de la seleccion (usado por la funcion de busqueda) */
 	function ping(zoneId) {
 		const outline = byZone("zone-select", zoneId);
 		outline.classList.remove("is-ping");
-		void outline.getBoundingClientRect(); // Reinicia las animaciones del CSS
+		void outline.getBoundingClientRect(); // restart the CSS animation
 		outline.classList.add("is-ping");
 		setTimeout(() => outline.classList.remove("is-ping"), PING_DURATION_MS);
 	}
 
-	/** Activa o desactiva la visualizacion de los nombres de las zonas. Devuelve true cuando los nombres estan ocultos. */
+	/** Activa o desactiva la visualizacion de los nombres de las zonas. Devuelve true cuando los nombres estan ocultos */
 	function toggleNames() {
 		return svg.classList.toggle("names-hidden");
 	}
 
-	/** Centro de una zona en coordenadas de viewBox. */
+	/** Centro de una zona en coordenadas de viewBox */
 	function getZoneCenter(zoneId) {
 		const box = byZone("zone-select", zoneId).getBBox();
 		return {

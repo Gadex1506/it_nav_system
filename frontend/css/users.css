@@ -1,0 +1,309 @@
+/* ============================================================================
+    Inclusive Tech - estilos de la pestana Usuarios
+    Contenido: distribucion (lista + panel lateral), tarjetas de usuario,
+    ficha de detalle, tarjeta de clave de acceso y responsive.
+    Depende de base.css (tokens y componentes compartidos).
+============================================================================ */
+
+/* 1. Distribucion ---------------------------------------------------------------- */
+
+.users-view {
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr var(--side-width);
+	min-height: max(600px, calc(100vh - 75px));
+}
+
+.users-main {
+	padding: 28px 36px 40px;
+	min-width: 0;
+}
+
+.users-side {
+	position: relative;
+	background: #ebe0c7;
+	border-left: 3px double var(--ink);
+	padding: 28px 48px 40px;
+}
+
+.side-hint {
+	margin: 120px 0 0;
+	font: 700 34px/1.2 var(--hand);
+	color: var(--ink-soft);
+}
+
+.users-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin-bottom: 22px;
+}
+
+.users-title {
+	margin: 0;
+	font: 700 34px/1.1 var(--serif);
+}
+
+.users-head .note {
+	max-width: 560px;
+}
+
+.users-actions {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.btn {
+	min-height: 48px;
+	padding: 0 18px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
+	background: var(--card);
+	font: 700 16px var(--sans);
+}
+
+.btn:hover {
+	background: var(--mustard);
+}
+
+.btn-primary {
+	background: var(--mustard);
+}
+
+.btn-primary:hover {
+	background: var(--sage);
+}
+
+.btn-danger {
+	background: var(--card);
+	border-color: var(--danger);
+	color: var(--danger);
+}
+
+.btn-danger:hover {
+	background: var(--danger);
+	color: var(--card);
+}
+
+.users-state {
+	margin: 8px 0 18px;
+	font: italic 500 19px var(--serif);
+	color: var(--ink-soft);
+}
+
+/* 2. Tarjeta de clave de acceso ---------------------------------------------------- */
+
+.key-card {
+	max-width: 520px;
+	margin: 0 0 24px;
+	padding: 20px 22px;
+	background: var(--card);
+	border: 2px solid var(--ink);
+	border-radius: 4px;
+	box-shadow: 5px 5px 0 rgba(27, 42, 65, .18);
+}
+
+.key-card form {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.key-card input {
+	flex: 1 1 220px;
+	min-width: 0;
+	min-height: 48px;
+	padding: 0 14px;
+	border: 2px solid var(--ink);
+	border-radius: 4px;
+	background: var(--paper);
+	font: 500 17px ui-monospace, Consolas, monospace;
+	color: var(--ink);
+}
+
+/* 3. Lista de usuarios -------------------------------------------------------------- */
+
+.users-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 16px;
+}
+
+.user-card {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	min-height: 84px;
+	padding: 12px 16px;
+	text-align: left;
+	background: var(--card);
+	border: 2px solid var(--ink);
+	border-radius: 4px;
+	box-shadow: 4px 4px 0 rgba(27, 42, 65, .14);
+	transition: transform .2s, box-shadow .2s;
+}
+
+.user-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 6px 6px 0 rgba(27, 42, 65, .18);
+}
+
+.user-card.is-selected {
+	background: #fff9e8;
+	box-shadow: 6px 6px 0 var(--ink);
+}
+
+.user-avatar {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 52px;
+	height: 52px;
+	border: 2px solid var(--ink);
+	border-radius: 50%;
+	font: 700 26px var(--serif);
+}
+
+.user-info {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.user-name {
+	font: 700 22px/1.1 var(--serif);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.user-role {
+	align-self: flex-start;
+	padding: 2px 10px;
+	border: 1.5px solid var(--ink);
+	border-radius: 20px;
+	font: 700 12px var(--sans);
+	letter-spacing: .08em;
+	text-transform: uppercase;
+	background: var(--paper);
+}
+
+.user-role.is-admin {
+	background: var(--mustard);
+}
+
+/* 4. Ficha de detalle --------------------------------------------------------------- */
+
+.user-detail {
+	position: relative;
+	background: var(--card);
+	border: 2px solid var(--ink);
+	border-radius: 4px;
+	padding: 22px 22px 8px;
+	box-shadow: 5px 5px 0 rgba(27, 42, 65, .18);
+	opacity: 0;
+	transform: translateX(26px) rotate(1.6deg);
+	transition: opacity .5s, transform .55s cubic-bezier(.2, .7, .2, 1);
+}
+
+.user-detail.is-visible {
+	opacity: 1;
+	transform: rotate(-.8deg);
+}
+
+.user-detail::before {
+	content: "";
+	position: absolute;
+	top: -15px;
+	left: 50%;
+	width: 120px;
+	height: 30px;
+	margin-left: -60px;
+	background: rgba(227, 178, 60, .78);
+	transform: rotate(2deg);
+	border-left: 2px dashed rgba(27, 42, 65, .25);
+	border-right: 2px dashed rgba(27, 42, 65, .25);
+}
+
+.user-name-input {
+	width: 100%;
+	min-height: 54px;
+	font: 700 24px var(--serif);
+	color: var(--ink);
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	border-radius: 4px;
+	padding: 0 14px;
+}
+
+.user-value {
+	margin: 0;
+	font: 500 18px var(--sans);
+}
+
+.user-detail .user-role {
+	display: inline-block;
+	font-size: 13px;
+}
+
+.danger-zone .note {
+	margin-bottom: 12px;
+}
+
+.confirm-actions {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+/* 5. Responsive ----------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+	.users-view {
+		display: block;
+		min-height: 0;
+	}
+	.users-main {
+		padding: 20px 16px 8px;
+	}
+	.users-side {
+		border-left: 0;
+		border-top: 3px double var(--ink);
+		padding: 28px 16px 32px;
+	}
+	.side-hint {
+		display: none;
+	}
+	.user-detail {
+		width: min(380px, 100%);
+		margin: 0 auto;
+	}
+	.user-detail[hidden] {
+		display: none;
+	}
+}
+
+@media (max-width: 700px) {
+	.users-title {
+		font-size: 28px;
+	}
+	.users-list {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.user-detail,
+	.user-card {
+		transition: none !important;
+	}
+}

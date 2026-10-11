@@ -1,6 +1,4 @@
 /**
-    * api.js
-    *
     * Capa de datos del panel web: unica responsabilidad es comunicarse
     * con el backend FastAPI por HTTP. No conoce el DOM ni la interfaz,
     * solo expone funciones simples que devuelven datos o lanzan errores.
@@ -8,21 +6,13 @@
     * Patron de disenio aplicado:
     *   - Facade: Cada funcion oculta los detalles de fetch() (headers,
     *     metodo HTTP, parseo de respuesta) y expone una operacion simple
-    *     y de alto nivel (ej. "renombrar nodo") hacia app.js.
-    *
-    * Nota para el equipo de frontend:
-    *   Este archivo es el "contrato" con el backend. Si migran a un
-    *   framework (React, Angular, etc.), esta logica se traduce casi
-    *   directo a un servicio o hook. Los endpoints, metodos HTTP y
-    *   formato de los datos NO deberian cambiar sin coordinar con el
-    *   equipo de backend.
+    *     y de alto nivel (ej. "renombrar nodo") hacia home.js.
 */
 
 // --- Configuracion base ----------------------------------------------
 // Si el backend corre en otra IP/puerto (ej, una Raspberry Pi en
 // red local), este es unico valor que hay que cambiar.
 const API_BASE_URL = "http://127.0.0.1:8001";
-
 
 
 /**

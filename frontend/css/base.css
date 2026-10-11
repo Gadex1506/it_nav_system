@@ -1,0 +1,254 @@
+/* ============================================================================
+    Inclusive Tech - estilos base (compartidos por todas las pestanas)
+    Contenido: tokens de diseno, base, encabezado, componentes compartidos
+    (campos, botones, fichas), avisos (toast, banner) y responsive del encabezado.
+============================================================================ */
+
+/* 1. Design tokens ---------------------------------------------------------- */
+
+:root {
+	--paper: #f3ead8;
+	--card: #fbf6e9;
+	--ink: #1b2a41;
+	--ink-soft: #3a4a62;
+	--mustard: #e3b23c;
+	--sage: #9bb08a;
+	--blue: #8fb0c9;
+	--rose: #d99a8f;
+	--danger: #a8321f;
+	--serif: Fraunces, Georgia, 'Times New Roman', serif;
+	--hand: Caveat, 'Comic Sans MS', cursive;
+	--sans: 'DM Sans', system-ui, sans-serif;
+	--side-width: 440px;
+	--header-height: 72px;
+	color-scheme: light;
+}
+
+/* 2. Base --------------------------------------------------------------------- */
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--sans);
+}
+
+body::before {
+	/* paper grain */
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: 50;
+	opacity: .5;
+	mix-blend-mode: multiply;
+	background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .25 0 0 0 0 .15 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+:focus-visible {
+	outline: 3px solid var(--ink);
+	outline-offset: 3px;
+}
+
+button {
+	font-family: inherit;
+	color: var(--ink);
+	cursor: pointer;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+/* 3. Header ------------------------------------------------------------------- */
+
+.topbar {
+	height: var(--header-height);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 36px;
+	border-bottom: 3px double var(--ink);
+}
+
+.brand {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.brand b {
+	font: 700 30px/1 var(--serif);
+	letter-spacing: -.5px;
+}
+
+.brand small {
+	display: block;
+	font: 500 12px var(--sans);
+	letter-spacing: .18em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+	margin-top: 5px;
+}
+
+nav {
+	display: flex;
+	gap: 4px;
+}
+
+nav a {
+	min-height: 48px;
+	padding: 0 20px;
+	display: flex;
+	align-items: center;
+	font: 500 17px var(--sans);
+	color: var(--ink);
+	text-decoration: none;
+	border-bottom: 3px solid transparent;
+}
+
+nav a:hover,
+nav a[aria-current="page"] {
+	border-color: var(--ink);
+}
+
+/* 4. Componentes compartidos ---------------------------------------------------- */
+
+.close-btn {
+	width: 48px;
+	height: 48px;
+	border: 2px solid var(--ink);
+	border-radius: 50%;
+	background: none;
+	font-size: 26px;
+	line-height: 1;
+}
+
+.close-btn:hover {
+	background: var(--rose);
+}
+
+.sec {
+	border-top: 1.5px solid var(--ink);
+	padding: 12px 0 16px;
+}
+
+.sec-title {
+	display: block;
+	font: 700 13px var(--sans);
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+	margin-bottom: 9px;
+}
+
+.field-error {
+	margin: 8px 0 0;
+	font: 500 15px var(--sans);
+	color: var(--danger);
+}
+
+.note {
+	margin: 6px 0 0;
+	font: italic 500 16px var(--serif);
+	color: var(--ink-soft);
+}
+
+.note+ .tech-name {
+	margin-top: 14px;
+}
+
+.tech-name {
+	display: inline-block;
+	padding: 6px 10px;
+	background: var(--paper);
+	border: 1.5px dashed var(--ink);
+	border-radius: 3px;
+	font: 500 15px ui-monospace, Consolas, monospace;
+	word-break: break-all;
+}
+
+.is-busy {
+	opacity: .6;
+	pointer-events: none;
+}
+
+/* 5. Avisos: toast y banner ------------------------------------------------------ */
+
+#toast {
+	position: fixed;
+	left: 50%;
+	bottom: 24px;
+	transform: translateX(-50%);
+	z-index: 10;
+	background: var(--ink);
+	color: var(--paper);
+	padding: 12px 22px;
+	border-radius: 6px;
+	font: 500 17px var(--sans);
+	max-width: 80%;
+}
+
+.banner {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 16px;
+	background: var(--rose);
+	border-bottom: 2px solid var(--ink);
+	font: 500 17px var(--sans);
+}
+
+.banner button {
+	min-height: 40px;
+	padding: 0 16px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
+	background: var(--card);
+	font: 700 16px var(--sans);
+}
+
+/* 6. Responsive del encabezado y movimiento reducido ---------------------------- */
+
+@media (max-width: 1100px) {
+	.topbar {
+		padding: 0 14px;
+	}
+}
+
+@media (max-width: 700px) {
+	.topbar {
+		height: auto;
+		flex-wrap: wrap;
+		gap: 4px;
+		padding: 8px 12px 0;
+	}
+	.brand b {
+		font-size: 24px;
+	}
+	.brand small {
+		display: none;
+	}
+	nav {
+		width: 100%;
+		overflow-x: auto;
+	}
+	nav a {
+		min-height: 44px;
+		padding: 0 12px;
+		font-size: 15px;
+		white-space: nowrap;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		animation: none !important;
+		transition: none !important;
+	}
+}

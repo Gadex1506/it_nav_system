@@ -1,10 +1,10 @@
 /**
-    * Acercar/alejar (rueda / botones) y desplazar (arrastrar) el plano.
-    *
-    * Capa: Presentacion (comportamiento de interaccion). Responsabilidad unica: Mueve
-    * y escala un contenedor. No sabe nada sobre las zonas ni el backend.
-    * 
-    * Analogia: Es quien maneja la camara. Decide que parte de la mesa se ve.
+* Acercar/alejar (rueda / botones) y desplazar (arrastrar) el plano.
+*
+* Capa Presentacion (comportamiento interactivo): Responsabilidad unica de mover
+* y escalar un contenedor. No sabe nada sobre las zonas ni sobre el backend.
+* 
+* Analogia: El que majea la camara. Decide que parte de la mesa se ve.
 */
 const Viewport = (() => {
 	"use strict";
@@ -21,20 +21,19 @@ const Viewport = (() => {
 	const MAX_PLAN_WIDTH = 980;
 	const SIDE_MARGIN_PX = 60;
 	const BOTTOM_RESERVED_PX = 150;
-	//const VERTICAL_NUDGE_PX = 30;
 	const ANIMATION_MS = 480;
-    const CONTROLS_GAP_PX = 4;
-    const MIN_TOP_PX = 56;
-    const STACKED_QUERY = "(max-width: 1100px)";
-    const STACKED_MARGIN_PX = 12;
-    const STACKED_MIN_WIDTH = 300;
-    const STACKED_PADDING_PX = 12;
+	const CONTROLS_GAP_PX = 4; // El SVG del plano ya tiene unos 20 pixeles de margen en blanco
+	const MIN_TOP_PX = 56; // Evita que aparezca la marca de guardado
+	const STACKED_QUERY = "(max-width: 1100px)";
+	const STACKED_MARGIN_PX = 12;
+	const STACKED_MIN_WIDTH = 300;
+	const STACKED_PADDING_PX = 12;
 
 	let area;
 	let view;
 	let svg;
 	let zoomLabel;
-    let controls;
+	let controls;
 	let onChange;
 	let onBackgroundClick;
 	let zoom = 1;
@@ -60,37 +59,39 @@ const Viewport = (() => {
 		ty = Math.min(area.clientHeight - KEEP_VISIBLE_PX, Math.max(KEEP_VISIBLE_PX - h, ty));
 	}
 
-	/** Ajusta el plano a la zona y lo vuelve a centrar (zoom al 100 %). */
+	/** Ajusta el plano, lo vuelve a centrar (ampliación al 100 %) y coloca los controles */
 	function layout() {
-        const stacked = window.matchMedia(STACKED_QUERY).matches;
-        const aw = area.clientWidth;
-        zoom = 1;
-        if (stacked) {
-   		    planWidth = Math.max(STACKED_MIN_WIDTH, Math.min(MAX_PLAN_WIDTH, aw - 2 * STACKED_MARGIN_PX));
-   		    planHeight = (planWidth * vb().height) / vb().width;
-   		    area.style.height = `${planHeight + 2 * STACKED_PADDING_PX}px`;
-            controls.style.top = "";
-            controls.style.bottom = "";
-            tx = (aw - planWidth) / 2;
-            ty = STACKED_PADDING_PX;
-        } else {
-            area.style.height = "";
-            const ah = area.clientHeight;
-            const controlsHeight = controls.offsetHeight;
-            planWidth = Math.max(MIN_PLAN_WIDTH, Math.min(MAX_PLAN_WIDTH, aw - SIDE_MARGIN_PX,
-   			    ((ah - BOTTOM_RESERVED_PX) * vb().width) / vb().height));
-   		    planHeight = (planWidth * vb().height) / vb().width;
-            const groupHeight = planHeight + CONTROLS_GAP_PX + controlsHeight;
-            tx = (aw - planWidth) / 2;
-            ty = Math.max(MIN_TOP_PX, (ah - groupHeight) / 2);
-            controls.style.bottom = "auto";
-            controls.style.top = `${Math.min(ty + planHeight + CONTROLS_GAP_PX, ah - controlsHeight - 12)}px`;
-        }
-        svg.style.width = `${planWidth}px`;
-        apply();
-    }
+		const stacked = window.matchMedia(STACKED_QUERY).matches;
+		const aw = area.clientWidth;
+		zoom = 1;
+		if (stacked) {
+			// Pantallas estrechas: todo se muestra verticalmente. El area se adapta al plano
+			planWidth = Math.max(STACKED_MIN_WIDTH, Math.min(MAX_PLAN_WIDTH, aw - 2 * STACKED_MARGIN_PX));
+			planHeight = (planWidth * vb().height) / vb().width;
+			area.style.height = `${planHeight + 2 * STACKED_PADDING_PX}px`;
+			controls.style.top = "";
+			controls.style.bottom = "";
+			tx = (aw - planWidth) / 2;
+			ty = STACKED_PADDING_PX;
+		} else {
+			// Escritorio: El plano y los controles estan centrados juntos como un unico grupo
+			area.style.height = "";
+			const ah = area.clientHeight;
+			const controlsHeight = controls.offsetHeight;
+			planWidth = Math.max(MIN_PLAN_WIDTH, Math.min(MAX_PLAN_WIDTH, aw - SIDE_MARGIN_PX,
+				((ah - BOTTOM_RESERVED_PX) * vb().width) / vb().height));
+			planHeight = (planWidth * vb().height) / vb().width;
+			const groupHeight = planHeight + CONTROLS_GAP_PX + controlsHeight;
+			tx = (aw - planWidth) / 2;
+			ty = Math.max(MIN_TOP_PX, (ah - groupHeight) / 2);
+			controls.style.bottom = "auto";
+			controls.style.top = `${Math.min(ty + planHeight + CONTROLS_GAP_PX, ah - controlsHeight - 12)}px`;
+		}
+		svg.style.width = `${planWidth}px`;
+		apply();
+	}
 
-	/** Aplica un cambio en la vista mediante una transicion CSS y, a continuacion, elimina la transicion. */
+	/** Aplica un cambio en la vista mediante una transicion CSS y, a continuacion, elimina la transicion */
 	function animated(change) {
 		view.classList.add("is-animated");
 		change();
@@ -117,7 +118,7 @@ const Viewport = (() => {
 	const reset = () => animated(layout);
 	const isZoomed = () => zoom > 1.05;
 
-	/** Centra la vista en un punto dado en coordenadas de viewBox. */
+	/** Centra la vista en un punto dado en coordenadas de viewBox */
 	function focusOn(point) {
 		animated(() => {
 			const k = planWidth / vb().width;
@@ -127,7 +128,7 @@ const Viewport = (() => {
 		});
 	}
 
-	/** Convierte un punto de viewBox a coordenadas de pixel relativas al escenario. */
+	/** Convierte un punto de la vista (viewBox) en coordenadas de pixeles relativas al escenario */
 	function toStagePoint(point, stage) {
 		const box = svg.getBoundingClientRect();
 		const s = stage.getBoundingClientRect();
@@ -138,7 +139,7 @@ const Viewport = (() => {
 		};
 	}
 
-	// --- Manejo de eventos de puntero ---------------------------------------------------------
+	// --- Manejo de punteros ---------------------------------------------------------
 	function onWheel(e) {
 		e.preventDefault();
 		const rect = area.getBoundingClientRect();
@@ -180,12 +181,12 @@ const Viewport = (() => {
 	function onPointerUp() {
 		if (!drag) return;
 		area.classList.remove("is-panning");
-		if (!drag.moved && !drag.middle) onBackgroundClick(); // plain click on empty space
+		if (!drag.moved && !drag.middle) onBackgroundClick(); // Haz clic en un espacio en blanco
 		drag = null;
 	}
 
 	/**
-	    * @param {{area, view, svg, zoomLabel, onChange: function, onBackgroundClick: function}} o
+		* @param {{area, view, svg, zoomLabel, controls, onChange: function, onBackgroundClick: function}} o
 	*/
 	function init(o) {
 		({
@@ -193,7 +194,7 @@ const Viewport = (() => {
 			view,
 			svg,
 			zoomLabel,
-            controls,
+			controls,
 			onChange,
 			onBackgroundClick
 		} = o);

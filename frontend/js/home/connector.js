@@ -1,11 +1,9 @@
 /**
-    * -----------------------------------------------------------------------------
-    * Linea punteada que une la zona seleccionada en el plano con su ficha. 
-    *
-    * Capa: Presentacion (superposicion decorativa). Recibe dos
-    * puntos (en pixeles) y traza una curva entre ellos.
-    *  
-    * Analogia: Un trozo de hilo rojo sujeto entre el mapa y la nota.
+	* Linea punteada que une la zona seleccionada en el plano con su ficha. 
+	*
+	* Capa: Presentacion. Geometria pura: Recibe dos
+	* puntos (en pixeles) y traza una curva entre ellos. 
+	* Analogia: un trozo de hilo rojo sujeto entre el mapa y la nota.
 */
 const Connector = (() => {
 	"use strict";
@@ -46,7 +44,7 @@ const Connector = (() => {
 		pinEnd.setAttribute("cy", py);
 	}
 
-	/** Redibuja cada fotograma durante "ms". Se utiliza mientras los paneles o el zoom se estan animando */
+	/** Redibuja cada fotograma durante ms (se utiliza mientras los paneles o el zoom estan animando) */
 	function follow(ms = FOLLOW_FRAME_LIMIT_MS) {
 		const t0 = performance.now();
 		(function frame() {
@@ -63,9 +61,9 @@ const Connector = (() => {
 	}
 
 	/**
-	    * @param {{overlay, line, mask, pinStart, pinEnd,
-	    *          resolveStart: function, resolveEnd: function, isInside: function}} o
-	    * resolve* devuelve {x, y} en pixeles de escenario, o null para ocultar el conector
+		* @param {{overlay, line, mask, pinStart, pinEnd,
+		*          resolveStart: function, resolveEnd: function, isInside: function}} o
+		* resolve* devuelve {x, y} en pixeles de escenario, o null para ocultar el conector
 	*/
 	function init(o) {
 		({

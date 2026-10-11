@@ -1,22 +1,21 @@
 /**
-	* -----------------------------------------------------------------------------
-	* Descripcion estatica del plano de planta (solo geometria; SIN datos del backend).
+	* Descripcion estatica del plano de planta (solo geometria, SIN datos del backend). 
 	*
-	* Capa: Presentacion / Datos (datos puros + elementos geometricos minimos).
-	* 
-	* Analogia: Este archivo es el plano del arquitecto. Indica donde se dibujan las paredes y
-	* las estancias; nunca especifica como se llaman dichas estancias actualmente; eso
-	* proviene del backend.
+	* Capa: Presentacion / Datos (datos puros + pequenios elementos auxiliares de geometria).
+	*  
+	* Analogia: Este archivo es el plano del arquitecto. Dice donde se dibujan las paredes y
+	* las estancias; nunca especifica como se llaman dichas estancias actualmente; esa
+	* informacion proviene del backend. 
 	*
-	* Vinculo entre zona y backend:
-	*   Cada zona enumera "internalNames": Los nombres tecnicos (normalizados en mayusculas,
+	* Vínculo Zona <-> backend:
+	*   Cada zona enumera "internalNames": Los nombres tecnicos (normalizados: mayusculas,
 	*   sin acentos, sin espacios ni simbolos) que puede tener un nodo de Unity. El primer nodo
-	*   del backend cuyo "internal_name" normalizado figure en dicha lista se vincula a la zona.
+	*   del backend cuyo "internal_name" normalizado figure en esa lista se vincula a la zona.
 */
 const PlanData = (() => {
 	"use strict";
 
-	// --- Constantes de dibujo del plano --------------
+	// --- Constantes de dibujo --------------
 	const VIEW_BOX = Object.freeze({
 		x: 30,
 		y: 100,
@@ -29,13 +28,13 @@ const PlanData = (() => {
 	const WINDOW_PANE_OFFSET = 5;
 	const WINDOW_LINE_WIDTH = 3.2;
 
-	// --- Funciones auxiliares minimas para formas SVG (usadas unicamente para generar el marcado del icono) --------
+	// --- Ayudantes de forma SVG minimos (usados ​​solo para crear el marcado del icono) --------
 	const rect = (x, y, w, h, r = 0) =>
 		`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/>`;
 	const path = (d) => `<path d="${d}"/>`;
 	const circle = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}"/>`;
 
-	/** Iconos de las habitaciones minimalistas, dibujados en torno al punto (0,0) y posteriormente escalados. */
+	/** Iconos de zonas de una casa minimalista, dibujados en torno al punto (0,0) y posteriormente escalados */
 	const ICONS = Object.freeze({
 		doubleBed: {
 			scale: 1.5,
@@ -73,7 +72,7 @@ const PlanData = (() => {
 
 	/**
 		* Las seis zonas. Los "internalNames" son los nombres tecnicos aceptados. 
-		* Las coordenadas estan en el espacio del "viewBox" de SVG.	
+		* Las coordenadas estan en el espacio del "viewBox" de SVG.
 	*/
 	const ZONES = Object.freeze([{
 		id: "main-bedroom",
@@ -219,14 +218,14 @@ const PlanData = (() => {
 		},
 	}, ]);
 
-	// --- Aberturas: puertas (espacio) y ventanas (espacio + paneles) -----------
-	/** Puerta: orientacion, punto de inicio, longitud, sentido de apertura. Devuelve [espacio, sentido de apertura]. */
+	// --- Aberturas: puertas (espacios) y ventanas (espacios + vidrios) -----------
+	/** Puerta: orientacion, punto de inicio, longitud, sentido de apertura. Devuelve [distancia, sentido de apertura] */
 	const door = (o, x, y, l, s) =>
 		o === "h" ?
 		[`M${x} ${y}H${x + l}`, `M${x} ${y}V${y + s * l}A${l} ${l} 0 0 ${s < 0 ? 1 : 0} ${x + l} ${y}`] :
 		[`M${x} ${y}V${y + l}`, `M${x} ${y}H${x + s * l}A${l} ${l} 0 0 ${s > 0 ? 1 : 0} ${x} ${y + l}`];
 
-	/** Ventana: orientacion, punto de inicio, longitud. Devuelve [espacio, paneles]. */
+	/** Ventana: orientacion, punto inicial, longitud. Devuelve [espacios, paneles] */
 	const windowShape = (o, x, y, l) =>
 		o === "h" ?
 		[`M${x} ${y}H${x + l}`, `M${x} ${y - WINDOW_PANE_OFFSET}H${x + l}M${x} ${y + WINDOW_PANE_OFFSET}H${x + l}`] :
@@ -257,7 +256,7 @@ const PlanData = (() => {
 		width: WALL_WIDTH_INNER,
 	}, ]);
 
-	/** Linea discontinua que separa visualmente la cocina y el comedor (sin pared). */
+	/** Linea discontinua que separa visualmente la cocina y el comedor (sin pared) */
 	const KITCHEN_DINING_DIVIDER = "M800 146V426";
 
 	const DOOR_BADGES = Object.freeze([{
@@ -301,7 +300,7 @@ const PlanData = (() => {
 		y: 917
 	}, ]);
 
-	/** "1" -> "01" Número de zona que aparece en el plano y en la ficha. */
+	/** «1» -> «01» Numero de zona que figura en el plano y en la ficha */
 	const formatZoneNumber = (index) => String(index + 1).padStart(2, "0");
 
 	return Object.freeze({

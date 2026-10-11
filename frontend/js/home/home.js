@@ -1,23 +1,22 @@
 /**
-    * -----------------------------------------------------------------------------
-    Controlador de la pestania "Hogar". Conecta tres elementos:
-    *   - api.js             -> se comunica con el backend (capa de datos, fachada)
-    *   - PlanRenderer       -> dibuja el plano (vista)
-    *   - Viewport/Connector -> camara y conector decorativo
-    *
-    * Capa: Presentacion (controlador / mediador). Gestiona el estado de la interfaz de usuario
-    * y es el unico archivo que conoce tanto el backend como la vista.
-    *  
-    * Analogia: el que orquesta la escena. Le dice a los actores (renderer) que mostrar y
-    * recurre al almacen (api.js) cuando es necesario guardar algo. 
-    *
-    * Vinculacion zona <-> nodo: Cada zona del plano enumera los nombres tecnicos que acepta
-    * (PlanData.ZONES[].internalNames). El primer nodo de tipo ROOM del backend cuyo
-    * "internal_name" normalizado coincida se vincula a la zona. Las zonas sin nodo
-    * asociado se muestran como "SIN REGISTRAR" y son de solo lectura. 
-    *
-    * Las luces no se gestionan aqui deliberadamente: El backend no dispone de
-    * endpoints para luces.
+	* Controlador de la pestana "Hogar". Conecta tres elementos:
+	*   - nav-api.js      -> se comunica con el backend (capa de datos, fachada)
+	*   - PlanRenderer    -> dibuja el plano (vista)
+	*   - Viewport/Connector -> camara y conector decorativo
+	*
+	* Capa: Presentacion (controlador / mediador). Gestiona el estado de la interfaz de usuario
+	* y es el unico archivo que conoce tanto el backend como la vista.
+	*  
+	* Analogia: El que maneja la escena - Le dice a los actores (renderer) que mostrar y
+	* recurre al almacen (nav-api.js) cuando es necesario guardar algo. 
+	*
+	* Vinculacion zona <-> nodo: Cada zona del plano enumera los nombres tecnicos que acepta
+	* (PlanData.ZONES[].internalNames). El primer nodo de tipo ROOM del backend cuyo
+	* "internal_name" normalizado coincida se vincula a la zona. Las zonas sin nodo
+	* asociado se muestran como "SIN REGISTRAR" y son de solo lectura. 
+	*
+	* Las luces no se gestionan aqui deliberadamente: el backend no dispone de
+	* endpoints para luces.
 */
 (() => {
 	"use strict";
@@ -26,17 +25,11 @@
 	const MAX_ALIASES = 5; // Debe coincidir con la regla del backend
 	const MAX_NAME_LENGTH = 40;
 	const SAVED_MESSAGE_MS = 2400;
-	const TOAST_MS = 3500;
 	const NOTE_MS = 7000;
 	const MAX_SUGGESTIONS = 5;
 	const SUGGESTION_BLUR_DELAY_MS = 150;
 	const SMALL_SCREEN_QUERY = "(max-width: 1100px)";
 	const NODE_TYPE_ROOM = "room";
-	const COMING_SOON = {
-		users: "Usuarios",
-		settings: "Configuración",
-		help: "Ayuda"
-	};
 
 	const $ = (id) => document.getElementById(id);
 
@@ -46,7 +39,7 @@
 	let selectedId = null;
 	let allNodes = [];
 
-	// --- Referencias del DOM -----------------------------------------------------------
+	// --- Referencias DOM -----------------------------------------------------------
 	const dom = {
 		stage: $("stage"),
 		area: $("area"),
@@ -68,10 +61,10 @@
 	};
 
 	// ============================================================================
-	// Pequenias ayudas de utilidad (normalizacion de nombres, busqueda, etc.)
+	// Pequenias utilidades de normalizacion y busqueda
 	// ============================================================================
 
-	/** "Baño " -> "BANO": Eliminar acentos, quitar caracteres no alfanumericos, convertir a mayusculas. */
+	/** "Baño " -> "BANO": Eliminar acentos, quitar caracteres no alfanumericos, convertir a mayusculas */
 	function normalizeTechnicalName(value) {
 		return String(value || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
 			.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -90,7 +83,7 @@
 	const aliasesOf = (zone) => (zone.node ? zone.node.aliases : []);
 
 	// ============================================================================
-	// Widgets de comentarios: sello de guardado, notificacion emergente (toast), banner de modo sin conexion.
+	// Widgets de comentarios: sello de guardado, notificacion emergente (toast), banner de modo sin conexion
 	// ============================================================================
 
 	const SaveIndicator = (() => {
@@ -127,40 +120,11 @@
 		};
 	})();
 
-	const Toast = (() => {
-		const node = $("toast");
-		let timer = null;
-		return {
-			show(message) {
-				node.textContent = message;
-				node.hidden = false;
-				clearTimeout(timer);
-				timer = setTimeout(() => {
-					node.hidden = true;
-				}, TOAST_MS);
-			},
-		};
-	})();
-
-	const Banner = (() => {
-		const node = $("banner");
-		const text = $("bannerText");
-		return {
-			show(message) {
-				text.textContent = message;
-				node.hidden = false;
-			},
-			hide() {
-				node.hidden = true;
-			},
-		};
-	})();
-
 	// ============================================================================
-	// Datos: carga y vinculacion de nodos de backend a zonas de existentes en el plano.
+	// Datos: carga y vinculacion de nodos de backend a zonas de planificacion.
 	// ============================================================================
 
-	/** Asocia el primer nodo de sala coincidente a cada zona (cada nodo se utiliza una unica vez). */
+	/** Asocia el primer nodo de sala coincidente a cada zona (cada nodo se utiliza una sola vez) */
 	function assignNodesToZones(nodes) {
 		const used = new Set();
 		zones.forEach((zone) => {
@@ -172,7 +136,7 @@
 		});
 	}
 
-	/** Redibuja la etiqueta de una zona a partir de su estado actual. */
+	/** Redibuja la etiqueta de una zona a partir de su estado actual */
 	function renderZone(zone) {
 		PlanRenderer.updateZone(zone.definition.id, {
 			name: displayNameOf(zone),
@@ -190,13 +154,13 @@
 			assignNodesToZones(allNodes);
 			Banner.hide();
 		} catch (error) {
-			Banner.show(`No se pudo conectar con el servicio de navegación. ${errorText(error)}`);
+			Banner.show(`No se pudo conectar con el servicio de navegación. ${errorText(error)}`, loadNodes);
 		}
 		renderAllZones();
 		if (selectedId) renderFicha();
 	}
 
-	/** Vuelve a leer un nodo del backend (la fuente de verdad tras un cambio). */
+	/** Vuelve a leer un nodo del backend (la fuente de verdad tras un cambio) */
 	async function refreshNode(zone) {
 		zone.node = await fetchNodeById(zone.node.id);
 		renderZone(zone);
@@ -237,10 +201,12 @@
 		Connector.update();
 		Connector.replay();
 		Connector.follow();
-
-        if (id && window.matchMedia(SMALL_SCREEN_QUERY).matches) {
-            dom.ficha.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+		if (id && window.matchMedia(SMALL_SCREEN_QUERY).matches) {
+			dom.ficha.scrollIntoView({
+				behavior: "smooth",
+				block: "nearest"
+			}); // disenio apilado: mostrar la tarjeta
+		}
 	}
 
 	function renderFicha() {
@@ -273,7 +239,7 @@
 	}
 
 	// ============================================================================
-	// Renombrar nodo
+	// Renombrar zona
 	// ============================================================================
 
 	async function commitRename() {
@@ -307,7 +273,7 @@
 	}
 
 	// ============================================================================
-	// Alias nodos
+	// Alias de nodos (habitaciones de una casa)
 	// ============================================================================
 
 	function makeButton(text, label, className, onClick) {
@@ -405,7 +371,7 @@
 	}
 
 	// ============================================================================
-	// Busqueda (por nombre de visualizacion, nombre por defecto o alias)
+	// Buscar por nombre visible, nombre predeterminado o alias
 	// ============================================================================
 
 	const search = (() => {
@@ -506,7 +472,7 @@
 	})();
 
 	// ============================================================================
-	// Conexiones e inicio
+	// Enlaces e inicio
 	// ============================================================================
 
 	function wireEvents() {
@@ -535,12 +501,6 @@
 			e.currentTarget.textContent = PlanRenderer.toggleNames() ? "Mostrar nombres" : "Ocultar nombres";
 		});
 
-		$("bannerRetry").addEventListener("click", loadNodes);
-		document.querySelectorAll("nav a").forEach((link) => link.addEventListener("click", (e) => {
-			e.preventDefault();
-			const label = COMING_SOON[link.dataset.tab];
-			if (label) Toast.show(`${label} · próximamente`);
-		}));
 	}
 
 	function init() {
@@ -572,7 +532,7 @@
 			view: dom.view,
 			svg: dom.plan,
 			zoomLabel: $("zoomLabel"),
-            controls: $("bottom"),
+			controls: $("bottom"),
 			onChange: Connector.update,
 			onBackgroundClick: () => {
 				if (selectedId) selectZone(null);
@@ -580,8 +540,17 @@
 		});
 		renderAllZones();
 		wireEvents();
-		loadNodes();
+	}
+
+	/** Lo llama Tabs cada vez que la pestana Hogar pasa a ser visible. */
+	function onShow() {
+		Viewport.layout(); // el area medida en 0 mientras estaba oculta
+		loadNodes(); // refresca datos del backend
+		if (selectedId) Connector.follow();
 	}
 
 	init();
+	window.HomeTab = Object.freeze({
+		onShow
+	});
 })();
