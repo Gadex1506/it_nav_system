@@ -1,28 +1,28 @@
 /**
-	* Capa de datos de la pestana Usuarios: habla con el servicio de
-	* reconocimiento facial (servidor HTTP embebido en la app de Unity, puerto 8002).
-	*
-	* Capa: Presentacion -> acceso a datos (igual que nav-api.js).
-	* 
-	* Patrones:
-	*   - Facade: 4 funciones simples ocultan fetch, cabeceras y manejo de errores.
-	*   - Adapter: Traduce el JSON del servicio (nombre, es_administrador,
-	*     fecha_registro) al objeto interno en ingles { id, name, isAdmin,
-	*     registeredAt }. Si el servicio cambia sus campos, solo se toca aqui.
-	* 
-	* Analogia: El traductor de la embajada. El resto del panel nunca habla el
-	* idioma del otro servicio.
-	*
-	* Seguridad: la clave X-Api-Key NO va escrita en el codigo. La persona la
-	* pega una vez en el panel (esta en admin_api_key.txt, junto a la app Unity)
-	* y se guarda solo en el navegador de esa maquina.
-	*
-	* Nota: la creacion de usuarios (POST /users) NO existe y no se implementa.
-*/
+ * users-api.js
+ * -----------------------------------------------------------------------------
+ * Capa de datos de la pestana Usuarios: habla con el servicio de
+ * reconocimiento facial (servidor HTTP embebido en la app Unity, puerto 8002).
+ *
+ * Capa: Presentacion -> acceso a datos (igual que nav-api.js).
+ * Patrones:
+ *   - Facade: 4 funciones simples ocultan fetch, cabeceras y manejo de errores.
+ *   - Adapter: traduce el JSON del servicio (nombre, es_administrador,
+ *     fecha_registro) al objeto interno en ingles { id, name, isAdmin,
+ *     registeredAt }. Si el servicio cambia sus campos, solo se toca aqui.
+ * Analogia: el traductor de la embajada; el resto del panel nunca habla el
+ * idioma del otro servicio.
+ *
+ * Seguridad: la clave X-Api-Key NO va escrita en el codigo. La persona la
+ * pega una vez en el panel (esta en admin_api_key.txt, junto a la app Unity)
+ * y se guarda solo en el navegador de esa maquina.
+ *
+ * Nota: la creacion de usuarios (POST /users) NO existe y no se implementa.
+ */
 
 const USERS_API_BASE_URL = "http://localhost:8002";
 
-/** Tipos de error para que la interfaz decida que mostrar */
+/** Tipos de error para que la interfaz decida que mostrar. */
 const UsersApiErrorKind = Object.freeze({
 	MISSING_KEY: "missing-key",
 	CONNECTION: "connection",
@@ -35,10 +35,10 @@ const UsersApiErrorKind = Object.freeze({
 
 class UsersApiError extends Error {
 	/**
-		* @param {string} message texto listo para mostrar
-		* @param {string} kind uno de UsersApiErrorKind
-		* @param {number|null} status codigo HTTP (null si no hubo respuesta)
-	*/
+	 * @param {string} message texto listo para mostrar
+	 * @param {string} kind uno de UsersApiErrorKind
+	 * @param {number|null} status codigo HTTP (null si no hubo respuesta)
+	 */
 	constructor(message, kind, status = null) {
 		super(message);
 		this.name = "UsersApiError";
@@ -47,7 +47,7 @@ class UsersApiError extends Error {
 	}
 }
 
-/** Guarda la clave en el navegador (si el almacenamiento no esta disponible, solo en memoria) */
+/** Guarda la clave en el navegador (si el almacenamiento no esta disponible, solo en memoria). */
 const UsersApiKeyStore = (() => {
 	const STORAGE_KEY = "inclusiveTech.usersApiKey";
 	let memoryKey = "";
@@ -79,7 +79,22 @@ const UsersApiKeyStore = (() => {
 	});
 })();
 
-// --- Mensajes para el usuario ------------------------------------------
+/**
+ * Si la URL trae "#key=LACLAVE" (la abre el boton del menu de Unity), guarda la
+ * clave y limpia la URL para que no quede visible ni en el historial.
+ * Todo lo que va despues del "#" nunca se envia a ningun servidor.
+ */
+function consumeKeyFromUrl() {
+	const match = window.location.hash.match(/(?:^#|&)key=([^&]+)/);
+	if (!match) return;
+	try {
+		UsersApiKeyStore.set(decodeURIComponent(match[1]));
+	} catch (e) { /* clave mal codificada: se ignora */ }
+	history.replaceState(null, "", window.location.pathname + window.location.search);
+}
+consumeKeyFromUrl();
+
+// --- Mensajes para la persona usuaria ------------------------------------------
 const USERS_API_MESSAGES = Object.freeze({
 	missingKey: "Falta la clave de acceso del sistema de reconocimiento facial.",
 	connection: "No se pudo conectar al sistema de reconocimiento facial. Verifica que la app de Unity esté abierta.",
@@ -89,7 +104,7 @@ const USERS_API_MESSAGES = Object.freeze({
 	generic: "El sistema de reconocimiento respondió con un error.",
 });
 
-/** Convierte el JSON del servicio al objeto interno del panel */
+/** Convierte el JSON del servicio al objeto interno del panel. */
 function mapUserFromApi(raw) {
 	return {
 		id: raw.id,
@@ -99,14 +114,14 @@ function mapUserFromApi(raw) {
 	};
 }
 
-/** El servicio manda 7 decimales ("...57.1963615Z"); se recortan a 3 para que todos los navegadores lo entiendan */
+/** El servicio manda 7 decimales ("...57.1963615Z"); se recortan a 3 para que todos los navegadores lo entiendan. */
 function parseApiDate(text) {
 	if (!text) return null;
 	const date = new Date(String(text).replace(/(\.\d{3})\d+/, "$1"));
 	return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** Lee el JSON de la respuesta sin romperse si el cuerpo viene vacio o no es JSON */
+/** Lee el JSON de la respuesta sin romperse si el cuerpo viene vacio o no es JSON. */
 async function readJsonSafely(response) {
 	try {
 		return await response.json();
@@ -116,9 +131,9 @@ async function readJsonSafely(response) {
 }
 
 /**
-	* Peticion generica al servicio. Lanza UsersApiError en cualquier fallo.
-	* @returns {Promise<any|null>} JSON de la respuesta, o null en 204
-*/
+ * Peticion generica al servicio. Lanza UsersApiError en cualquier fallo.
+ * @returns {Promise<any|null>} JSON de la respuesta, o null en 204
+ */
 async function usersRequest(path, {
 	method = "GET",
 	body = null

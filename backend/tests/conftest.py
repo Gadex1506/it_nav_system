@@ -31,7 +31,6 @@ def client(tmp_path, monkeypatch):
         2. Redirige la constante DATABASE_PATH hacia esa ruta temporal.
         3. Resetea la conexion Singleton para forzar que se conecte
         a la nueva base de datos temporal, no a la real.
-        4. Crea una casa base para que ACTIVE_HOUSE_ID=1 sea valido.
     
     Args:
         tmp_path: Fixture nativo de pytest, carpeta temporal unica
@@ -56,19 +55,25 @@ def client(tmp_path, monkeypatch):
     from app.infrastructure.database import db
     db._connection = None
 
+    # Clave de desarrollador temporal: nunca se toca la clave real
+    from app.infrastructure.dev_key_store import dev_key_store
+    monkeypatch.setattr(dev_key_store, "_file_path", tmp_path / "dev_key_test.txt")
+    monkeypatch.setattr(dev_key_store, "_cached_key", None)
+    test_dev_key, _ = dev_key_store.ensure_exists()
+
     from app.main import app as fastapi_app
 
     # El "with" activa el lifespan de FastAPI: crea el schema
     # automaticamente en la base de datos temporal al iniciar.
     with TestClient(fastapi_app) as test_client:
         # Toda instalacion necesita al menos una casa activa.
-        # la creamos aqui para que ACTIVE_HOUSE_ID=1 sea valido
-        # en todos los tests que usen este fixture.
         response = test_client.post(
             "/dev/houses",
-            json={"name": "Casa de Prueba", "description": "Entorno de testing"}
+            json={"name": "Casa de Prueba", "description": "Entorno de testing"},
+            headers={"X-Dev-Key": test_dev_key}
         )
         assert response.status_code == 201, "No se pudo crear la casa de pruebas."
+        test_client.headers.update({"X-Dev-Key": test_dev_key})
 
     yield test_client
 

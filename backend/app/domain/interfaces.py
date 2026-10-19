@@ -19,7 +19,7 @@ Principios SOLID aplicados:
 
 from abc import ABC, abstractmethod
 from typing import Optional
-from app.domain.models import House, Node, NodeAlias, NodeEdge
+from app.domain.models import House, Node, NodeAlias, NodeEdge, Device
 
 class AbstractHouseRepository(ABC):
     """
@@ -63,6 +63,16 @@ class AbstractHouseRepository(ABC):
         Returns:
             Lista de todas las casas en el repositorio. Lista vacia si no hay niguna.
         """
+        ...
+
+    @abstractmethod
+    def delete(self, house_id: int) -> bool:
+        """Elimina una casa y TODOS sus datos asociados. True si existia."""
+        ...
+
+    @abstractmethod
+    def count_nodes_by_house(self) -> dict[int, int]:
+        """Retorna {house_id: cantidad_de_nodos}."""
         ...
 
 class AbstractNodeRepository(ABC):
@@ -214,5 +224,96 @@ class AbstractNodeRepository(ABC):
 
         Returns:
             True si se elimino correctamente, False si no existia.
+        """
+        ...
+
+"""INTERFACE PARA EL REPOSITORIO DE DISPOSITIVOS (LUZ Y PUERTAS)"""
+
+class AbstractDeviceRepository(ABC):
+    """
+    Contrato abstracto para el repositorio de dispositivos.
+
+    Define las operaciones que cualquier implementacion debe proveer
+    para registrar, consultar, renombrar y eliminar los dispositivos
+    (luces y puertas) de las habitaciones.
+    """
+
+    @abstractmethod
+    def create(self, device: Device) -> Device:
+        """
+        Registra un nuevo dispositivo.
+
+        Args:
+            device: Instancia de Device a persistir.
+
+        Returns:
+            El mismo dispositivo con su ID asignado por la BD.
+
+        Raises:
+            DeviceKeyAlreadyExistsError: Si el device_key ya existe.
+        """
+        ...
+
+    @abstractmethod
+    def get_by_id(self, device_id: int) -> Optional[Device]:
+        """
+        Busca un dispositivo por su ID.
+
+        Returns:
+            El dispositivo encontrado o None si no existe.
+        """
+        ...
+
+    @abstractmethod
+    def get_all_by_house(
+        self, house_id: int, device_type: Optional[str] = None
+    ) -> list[Device]:
+        """
+        Retorna los dispositivos de todas las habitaciones de una casa.
+
+        Args:
+            house_id: ID de la casa.
+            device_type: Si se indica, filtra por tipo ('light' o 'door').
+
+        Returns:
+            Lista de dispositivos. Lista vacia si no hay ninguno.
+        """
+        ...
+
+    @abstractmethod
+    def get_all_by_node(
+        self, node_id: int, device_type: Optional[str] = None
+    ) -> list[Device]:
+        """
+        Retorna los dispositivos de una habitacion.
+
+        Args:
+            node_id: ID del nodo (habitacion).
+            device_type: Si se indica, filtra por tipo ('light' o 'door').
+
+        Returns:
+            Lista de dispositivos. Lista vacia si no hay ninguno.
+        """
+        ...
+
+    @abstractmethod
+    def update_display_name(self, device_id: int, display_name: str) -> Optional[Device]:
+        """
+        Actualiza el nombre visible de un dispositivo.
+
+        El device_key nunca cambia porque el contrato MQTT depende de el.
+
+        Returns:
+            El dispositivo actualizado o None si no existe.
+        """
+        ...
+
+    @abstractmethod
+    def delete(self, device_id: int) -> bool:
+        """
+        Elimina un dispositivo.
+
+        Returns:
+            True si se elimino, False si no existia.
         """
         ...

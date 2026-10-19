@@ -20,6 +20,7 @@ Principios SOLID aplicados:
     - D: Sin dependencias de infraestructura externa.
 """
 
+import re 
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -29,6 +30,9 @@ from app.config import (
     NODE_TYPE_WAYPOINT,
     NODE_STATUS_ACTIVE,
     VALID_NODE_TYPES,
+    VALID_DEVICE_TYPES,
+    DEVICE_KEY_PATTERN,
+    DEVICE_KEY_MAX_LENGTH,
 )
 
 # =============================================================
@@ -345,3 +349,94 @@ class Node:
             True si status es 'active'.
         """
         return self.status == NODE_STATUS_ACTIVE
+
+"""NUEVAS CLASES PARA EL CONTROL Y REGISTRO DE LUCES Y PUERTAS DE LA CASA"""
+
+@dataclass
+class Device:
+    """
+    Entidad que representa un dispositivo controlable de una habitacion
+    (una luz o una puerta).
+
+    Un Device es una UNIDAD QUE SE CONTROLA, no una bombilla: la luz de la
+    sala puede ser una lampara, cuatro o una tira LED, y para el sistema
+    sigue siendo un solo dispositivo con una orden de encender o apagar.
+
+    Igual que Node separa internal_name de display_name, aqui el device_key
+    es fijo (lo usa el contrato MQTT) y el display_name es editable.
+
+    El estado encendido/apagado NO se guarda aqui: lo reporta el propio
+    dispositivo. Esta entidad solo dice que el dispositivo existe.
+
+    Attributes:
+        node_id: ID del nodo (habitacion) al que pertenece.
+        device_type: Tipo del dispositivo ('light' o 'door').
+        device_key: Identificador tecnico fijo (ej: 'light_living').
+        display_name: Nombre visible y editable (ej: 'Luz de la sala').
+        id: Identificador unico asignado por la base de datos.
+        created_at: Fecha y hora de creacion.
+        updated_at: Fecha y hora de ultima modificacion.
+    """
+    node_id: int
+    device_type: str
+    device_key: str
+    display_name: str
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @classmethod
+    def create(
+        cls,
+        node_id: int,
+        device_type: str,
+        device_key: str,
+        display_name: str,
+    ) -> "Device":
+        """
+        Factory Method: Crea un dispositivo validando todos sus datos.
+
+        Args:
+            node_id: ID del nodo (habitacion) propietario.
+            device_type: Tipo del dispositivo ('light' o 'door').
+            device_key: Identificador tecnico. Se normaliza a minusculas
+                y solo admite letras, numeros y guion bajo.
+            display_name: Nombre visible. No puede estar vacio.
+
+        Returns:
+            Nueva instancia de Device lista para ser guardada.
+
+        Raises:
+            ValueError: Si el tipo, la clave o el nombre son invalidos.
+        """
+        if device_type not in VALID_DEVICE_TYPES:
+            raise ValueError(
+                f"Tipo de dispositivo invalido: '{device_type}'. "
+                f"Tipos validos: {VALID_DEVICE_TYPES}"
+            )
+
+        normalized_key = (device_key or "").strip().lower()
+
+        if not normalized_key:
+            raise ValueError("El device_key no puede estar vacio.")
+
+        if len(normalized_key) > DEVICE_KEY_MAX_LENGTH:
+            raise ValueError(
+                f"El device_key no puede superar {DEVICE_KEY_MAX_LENGTH} caracteres."
+            )
+
+        if not re.fullmatch(DEVICE_KEY_PATTERN, normalized_key):
+            raise ValueError(
+                "El device_key solo admite minusculas, numeros y guion bajo "
+                "(ejemplo: light_living)."
+            )
+
+        if not display_name or display_name.strip() == "":
+            raise ValueError("El nombre visible del dispositivo no puede estar vacio.")
+
+        return cls(
+            node_id=node_id,
+            device_type=device_type,
+            device_key=normalized_key,
+            display_name=display_name.strip(),
+        )

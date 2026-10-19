@@ -14,7 +14,8 @@ Principios SOLID aplicados:
     modificar el router de usuario.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 
 # SCHEMAS
 from app.presentation.schemas import (
@@ -24,18 +25,26 @@ from app.presentation.schemas import (
     EdgeCreateRequest, EdgeResponse,
     AliasCreateRequest, AliasResponse,
     MessageResponse, UnityPositionSchema,
-    PhysicalPositionSchema,
+    PhysicalPositionSchema, HouseSummaryResponse,
+    HousesOverviewResponse, DeviceCreateRequest, 
+    DeviceUpdateDisplayNameRequest, DeviceResponse,
 )
+
+from app.presentation.security import require_dev_key
+
+# REPOSITORIES
+from app.domain.exceptions import HouseDeletionNotConfirmedError, DeviceKeyAlreadyExistsError
 
 # SERVICES
 from app.application.house_service import HouseService
 from app.application.node_service import NodeService
+from app.application.device_service import DeviceService
 
 # INFRASTRUCTURE
 from app.infrastructure.database import get_db
 from app.infrastructure.repositories.house_repository import SQLiteHouseRepository
 from app.infrastructure.repositories.node_repository import SQLiteNodeRepository
-
+from app.infrastructure.repositories.device_repository import SQLiteDeviceRepository
 
 # Prefijo /dev el cual identifica estos endpoints como
 # exclusivos para el equipo de desarrollo y Unity
@@ -72,6 +81,18 @@ def get_node_service() -> NodeService:
     house_repository = SQLiteHouseRepository(connection)
     return NodeService(node_repository, house_repository)
 
+def get_device_service() -> DeviceService:
+    """
+    Construye y retorna el DeviceService con sus dependencias.
+
+    Returns:
+        DeviceService listo para usar con SQLite.
+    """
+    connection = get_db()
+    return DeviceService(
+        SQLiteDeviceRepository(connection),
+        SQLiteNodeRepository(connection),
+    )
 
 # --- Endpoints de House ------------------------------------------
 
@@ -79,7 +100,8 @@ def get_node_service() -> NodeService:
     "/houses",
     response_model=HouseResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crear una nueva casa"
+    summary="Crear una nueva casa (requiere X-Dev-Key)",
+    dependencies=[Depends(require_dev_key)]
 )
 async def create_house(
     request: HouseCreateRequest,
@@ -135,6 +157,60 @@ async def get_all_houses(
         )
         for h in houses
     ]
+
+@router.get(
+    "/houses/overview",
+    response_model=HousesOverviewResponse,
+    summary="Resumen de casas con cantidad de nodos (requiere X-Dev-Key)",
+    dependencies=[Depends(require_dev_key)]
+)
+async def get_houses_overview(
+    service: HouseService = Depends(get_house_service)
+) -> HousesOverviewResponse:
+    """Lista las casas con su cantidad de nodos y marca la casa activa."""
+    overview = service.get_houses_overview()
+    active_id = min((h.id for h, _ in overview), default=None)
+
+    houses = [
+        HouseSummaryResponse(
+            id=h.id,
+            name=h.name,
+            description=h.description,
+            created_at=str(h.created_at) if h.created_at else None,
+            updated_at=str(h.updated_at) if h.updated_at else None,
+            node_count=node_count,
+            is_active=(h.id == active_id),
+        )
+        for h, node_count in overview
+    ]
+
+    return HousesOverviewResponse(active_house_id=active_id, houses=houses)
+
+
+@router.delete(
+    "/houses/{house_id}",
+    response_model=MessageResponse,
+    summary="Eliminar una casa con todo lo relacionado (requiere X-Dev-Key)",
+    dependencies=[Depends(require_dev_key)]
+)
+async def delete_house(
+    house_id: int,
+    confirm_name: str = Query(description="Nombre exacto de la casa para confirmar"),
+    service: HouseService = Depends(get_house_service)
+) -> MessageResponse:
+    """Elimina una casa y, en una transaccion, sus nodos, alias y aristas."""
+    try:
+        house = service.delete_house(house_id, confirm_name)
+        return MessageResponse(
+            success=True,
+            message=f"Casa '{house.name}' eliminada junto con todos sus datos."
+        )
+
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+
+    except HouseDeletionNotConfirmedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
 
 
 # --- Endpoints de Node ------------------------------------------
@@ -335,6 +411,130 @@ async def add_alias(
             detail=str(error)
         )
 
+# --- Endpoints de Device (luces y puertas) ----------------------
+
+@router.post(
+    "/devices",
+    response_model=DeviceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar un dispositivo en una habitacion (requiere X-Dev-Key)",
+    dependencies=[Depends(require_dev_key)]
+)
+async def create_device(
+    request: DeviceCreateRequest,
+    service: DeviceService = Depends(get_device_service)
+) -> DeviceResponse:
+    """
+    Registra una luz o una puerta en una habitacion.
+
+    El device_key es el identificador fijo que usara el contrato MQTT
+    (por ejemplo light_living). No puede repetirse.
+    """
+
+    try:
+        device = service.create_device(
+            node_id=request.node_id,
+            device_type=request.device_type,
+            device_key=request.device_key,
+            display_name=request.display_name,
+        )
+        return _device_to_response(device)
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error)
+        )
+
+    except DeviceKeyAlreadyExistsError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error)
+        )
+
+@router.get(
+    "/devices",
+    response_model=list[DeviceResponse],
+    summary="Listar dispositivos de una casa o de una habitacion"
+)
+async def get_devices(
+    house_id: Optional[int] = Query(default=None, description="ID de la casa"),
+    node_id: Optional[int] = Query(default=None, description="ID de la habitacion"),
+    device_type: Optional[str] = Query(default=None, description="'light' o 'door'"),
+    service: DeviceService = Depends(get_device_service)
+) -> list[DeviceResponse]:
+    """
+    Lista dispositivos. Debe indicarse house_id o node_id (uno de los dos).
+    El filtro device_type es opcional.
+    """
+
+    if (house_id is None) == (node_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Indica house_id o node_id (solo uno de los dos)."
+        )
+
+    try:
+        if node_id is not None:
+            devices = service.get_devices_by_node(node_id, device_type)
+        else:
+            devices = service.get_devices_by_house(house_id, device_type)
+
+        return [_device_to_response(d) for d in devices]
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error)
+        )
+
+@router.patch(
+    "/devices/{device_id}/display-name",
+    response_model=DeviceResponse,
+    summary="Renombrar un dispositivo"
+)
+async def rename_device(
+    device_id: int,
+    request: DeviceUpdateDisplayNameRequest,
+    service: DeviceService = Depends(get_device_service)
+) -> DeviceResponse:
+    """Cambia el nombre visible. El device_key nunca cambia."""
+
+    try:
+        device = service.rename_device(device_id, request.display_name)
+        return _device_to_response(device)
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error)
+        )
+
+@router.delete(
+    "/devices/{device_id}",
+    response_model=MessageResponse,
+    summary="Eliminar un dispositivo (requiere X-Dev-Key)",
+    dependencies=[Depends(require_dev_key)]
+)
+async def delete_device(
+    device_id: int,
+    service: DeviceService = Depends(get_device_service)
+) -> MessageResponse:
+    """Elimina un dispositivo de su habitacion."""
+
+    try:
+        service.delete_device(device_id)
+
+        return MessageResponse(
+            success=True,
+            message=f"Dispositivo {device_id} eliminado correctamente."
+        )
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(error)
+        )
 
 # --- Funcion auxiliar privada --------------------------------
 
@@ -379,4 +579,25 @@ def _node_to_response(node) -> NodeResponse:
         ],
         created_at=str(node.created_at) if node.created_at else None,
         updated_at=str(node.updated_at) if node.updated_at else None,
+    )
+
+def _device_to_response(device) -> DeviceResponse:
+    """
+    Convierte un objeto Device del dominio a su schema de respuesta.
+
+    Args:
+        device: Instancia de Device del dominio.
+
+    Returns:
+        DeviceResponse listo para serializar como JSON.
+    """
+
+    return DeviceResponse(
+        id=device.id,
+        node_id=device.node_id,
+        device_type=device.device_type,
+        device_key=device.device_key,
+        display_name=device.display_name,
+        created_at=str(device.created_at) if device.created_at else None,
+        updated_at=str(device.updated_at) if device.updated_at else None,
     )

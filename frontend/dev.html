@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panel de desarrollo · INCLUSIVE_TECH</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/dev.css">
+</head>
+
+<body>
+    <div id="banner" class="banner" role="alert" hidden>
+        <span id="bannerText"></span>
+        <button id="bannerRetry" type="button">Reintentar</button>
+    </div>
+
+    <header class="topbar">
+        <div class="brand"><b>Panel de desarrollo</b></div>
+        <a class="dev-link" href="index.html">Ir al panel de usuario</a>
+    </header>
+
+    <main class="dev-main">
+        <section class="dev-card" id="keyCard">
+            <h2>Clave de desarrollador</h2>
+            <p class="dev-hint">Esta en el archivo <code>backend/data/dev_access_key.txt</code>. Se crea sola al iniciar
+                el backend por primera vez.</p>
+            <form id="keyForm" class="dev-row">
+                <input id="keyInput" type="password" autocomplete="off" placeholder="Pega aqui la clave"
+                    aria-label="Clave de desarrollador">
+                <button type="submit" class="dev-btn">Entrar</button>
+                <button type="button" id="keyForget" class="dev-btn dev-btn--ghost" hidden>Olvidar clave</button>
+            </form>
+        </section>
+
+        <div id="workArea" hidden>
+            <nav class="dev-tabs" aria-label="Secciones">
+                <a href="#" data-tab="houses" aria-current="page">Casas</a>
+                <a href="#" data-tab="devices">Dispositivos</a>
+            </nav>
+
+            <div id="housesView">
+                <p id="activeWarning" class="dev-warning" hidden></p>
+
+                <section class="dev-card">
+                    <h2>Crear casa</h2>
+                    <form id="createForm" class="dev-grid">
+                        <label>Nombre <input id="createName" maxlength="100" required></label>
+                        <label>Descripcion <input id="createDescription" maxlength="300"></label>
+                        <button type="submit" class="dev-btn">Crear casa</button>
+                    </form>
+                </section>
+
+                <section class="dev-card">
+                    <h2>Casas registradas</h2>
+                    <div id="housesEmpty" class="dev-hint" hidden>No hay casas registradas.</div>
+                    <table class="dev-table" id="housesTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Nodos</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="housesBody"></tbody>
+                    </table>
+                </section>
+            </div>
+
+            <div id="devicesView" hidden>
+                <p id="devicesNotice" class="dev-warning" hidden></p>
+
+                <section class="dev-card">
+                    <h2>Registrar dispositivo</h2>
+                    <p class="dev-hint">Un dispositivo es una unidad que se controla. Por ejemplo, la luz de la sala puede ser UNO solo
+                        aunque tenga varias lámparas. Es como si se registrara el interrumptor que enciende y apaga las luces de cada habitación más no las luces como tal. 
+                        La clave es el identificador fijo que usará el ESP32 (no se puede
+                        cambiar después).</p>
+                    <form id="devForm" class="dev-grid dev-grid--devices">
+                        <label>Habitación <select id="devRoom" required></select></label>
+                        <label>Tipo
+                            <select id="devType" required>
+                                <option value="light">Luz</option>
+                                <option value="door">Puerta</option>
+                            </select>
+                        </label>
+                        <label>Clave (device_key) <input id="devKey" maxlength="50" pattern="[a-z0-9_]+"
+                                title="Solo minúsculas, números y guion bajo. Ejemplo: light_sala" required
+                                autocomplete="off"></label>
+                        <label>Nombre visible <input id="devName" maxlength="100" required autocomplete="off"></label>
+                        <button type="submit" class="dev-btn">Registrar dispositivo</button>
+                    </form>
+                </section>
+
+                <section class="dev-card">
+                    <h2>Dispositivos de la casa activa</h2>
+                    <div id="devicesEmpty" class="dev-hint" hidden>Aún no hay dispositivos registrados.</div>
+                    <table class="dev-table" id="devicesTable">
+                        <thead>
+                            <tr>
+                                <th>Habitación</th>
+                                <th>Tipo</th>
+                                <th>Clave</th>
+                                <th>Nombre visible</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="devicesBody"></tbody>
+                    </table>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <dialog id="deleteDialog" class="dev-dialog">
+        <form method="dialog" id="deleteForm">
+            <h2>Eliminar casa</h2>
+            <p id="deleteMessage"></p>
+            <p id="deleteActive" class="dev-warning" hidden>Esta es la casa ACTIVA. Si la eliminas, el sistema usara la
+                siguiente casa (la de menor ID) o quedara sin casa si no existe otra.</p>
+            <label>Escribe el nombre exacto para confirmar
+                <input id="deleteConfirm" autocomplete="off">
+            </label>
+            <div class="dev-row">
+                <button type="button" id="deleteCancel" class="dev-btn dev-btn--ghost">Cancelar</button>
+                <button type="submit" id="deleteOk" class="dev-btn dev-btn--danger" disabled>Eliminar para
+                    siempre</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="renameDialog" class="dev-dialog">
+        <form method="dialog" id="renameForm">
+            <h2>Renombrar dispositivo</h2>
+            <p id="renameMessage"></p>
+            <label>Nuevo nombre visible
+                <input id="renameInput" maxlength="100" required autocomplete="off">
+            </label>
+            <div class="dev-row">
+                <button type="button" id="renameCancel" class="dev-btn dev-btn--ghost">Cancelar</button>
+                <button type="submit" class="dev-btn">Guardar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="deviceDeleteDialog" class="dev-dialog">
+        <form method="dialog" id="deviceDeleteForm">
+            <h2>Eliminar dispositivo</h2>
+            <p id="deviceDeleteMessage"></p>
+            <div class="dev-row">
+                <button type="button" id="deviceDeleteCancel" class="dev-btn dev-btn--ghost">Cancelar</button>
+                <button type="submit" class="dev-btn dev-btn--danger">Eliminar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script src="js/shared/feedback.js"></script>
+    <script src="js/shared/tabs.js"></script>
+    <script src="js/dev/dev-api.js"></script>
+    <script src="js/dev/dev.js"></script>
+    <script src="js/dev/devices.js"></script>
+    <script src="js/dev/dev-main.js"></script>
+</body>
+
+</html>

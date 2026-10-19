@@ -19,8 +19,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.infrastructure.database import db
-from app.config import ASSISTANT_NAME
-
+from app.config import ASSISTANT_NAME, ADMIN_PANEL_DIR
+from app.infrastructure.dev_key_store import dev_key_store
 
 # # --- Importar Routers ------------------------------------------
 from app.presentation.routers.dev_router import router as dev_router
@@ -45,6 +45,8 @@ async def lifespan(app: FastAPI):
     print(f"Iniciando la API del Sistema de Navegacion de Inclusive Tech - Asistente: {ASSISTANT_NAME}")
     db.initialize_schema()
     print("Base de datos inicializada correctamente.")
+
+    dev_key_store.ensure_exists()
 
     yield # El servidor esta corriendo aqui
 
@@ -109,6 +111,9 @@ async def health_check():
         "assistant": ASSISTANT_NAME,
         "message": "La API del sistema de navegacion esta funcionando correctamente."
     }
+
+from fastapi.staticfiles import StaticFiles
+app.mount("/", StaticFiles(directory=ADMIN_PANEL_DIR, html=True), name="panel")
 
 # =============================================================
 # Punto de entrada

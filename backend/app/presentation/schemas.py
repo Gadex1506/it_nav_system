@@ -23,6 +23,9 @@ from app.config import (
     NODE_TYPE_ROOM,
     NODE_TYPE_WAYPOINT,
     VALID_NODE_TYPES,
+    VALID_DEVICE_TYPES,
+    DEVICE_KEY_PATTERN,
+    DEVICE_KEY_MAX_LENGTH,
 )
 
 
@@ -64,6 +67,18 @@ class HouseResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+class HouseSummaryResponse(HouseResponse):
+    """Casa con datos extra para el panel de desarrollo."""
+    node_count: int = Field(description="Cantidad de nodos que tiene la casa")
+    is_active: bool = Field(description="True si es la casa activa (ACTIVE_HOUSE_ID)")
+
+
+class HousesOverviewResponse(BaseModel):
+    """Resumen de casas. active_house_id es None si no hay ninguna."""
+
+    active_house_id: Optional[int] = None
+    houses: list[HouseSummaryResponse]
+
 # ==================================================================
 # SCHEMAS DE POSICION
 # ==================================================================
@@ -90,7 +105,7 @@ class AliasCreateRequest(BaseModel):
     alias: str = Field(
         min_length=1,
         max_length=50,
-        description="Alias de voz que ARIA reconocera"
+        description="Alias de voz que MIA reconocera"
     )
 
     @field_validator("alias")
@@ -98,7 +113,7 @@ class AliasCreateRequest(BaseModel):
     def normalize_alias(cls, value: str) -> str:
         """
         Normaliza el alias a minusculas y sin espacios extras.
-        Garantiza consistencia en las busquedas de voz de ARIA.
+        Garantiza consistencia en las busquedas de voz de MIA.
         """
         return value.strip().lower()
 
@@ -253,6 +268,71 @@ class EdgeResponse(BaseModel):
     is_bidirectional: bool
     created_at: Optional[str] = None
 
+# ==================================================================
+# SCHEMAS DE DEVICE (luces y puertas)
+# ==================================================================
+
+class DeviceCreateRequest(BaseModel):
+    """
+    Schema para registrar un dispositivo en una habitacion (endpoint /dev).
+
+    Un dispositivo es una unidad que se controla: la luz de la sala es
+    UN dispositivo aunque tenga varias lamparas.
+    """
+
+    node_id: int = Field(description="ID del nodo (habitacion) donde se instala")
+
+    device_type: str = Field(
+        description=f"Tipo de dispositivo. Valores: {VALID_DEVICE_TYPES}"
+    )
+
+    device_key: str = Field(
+        min_length=1,
+        max_length=DEVICE_KEY_MAX_LENGTH,
+        pattern=DEVICE_KEY_PATTERN,
+        description="Identificador fijo del contrato MQTT. Ej: light_living"
+    )
+
+    display_name: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Nombre visible del dispositivo. Ej: Luz de la sala"
+    )
+
+    @field_validator("device_type")
+    @classmethod
+    def validate_device_type(cls, value: str) -> str:
+        """Valida que el tipo de dispositivo sea uno de los permitidos."""
+        if value not in VALID_DEVICE_TYPES:
+            raise ValueError(
+                f"Tipo de dispositivo invalido: {value}. "
+                f"Valores permitidos: {VALID_DEVICE_TYPES}"
+            )
+        return value
+
+
+class DeviceUpdateDisplayNameRequest(BaseModel):
+    """Schema para cambiar el nombre visible de un dispositivo."""
+
+    display_name: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Nuevo nombre visible del dispositivo"
+    )
+
+
+class DeviceResponse(BaseModel):
+    """Schema de respuesta para un dispositivo."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    node_id: int
+    device_type: str
+    device_key: str
+    display_name: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 # ==================================================================
 # SCHEMA GENERICO DE RESPUESTA

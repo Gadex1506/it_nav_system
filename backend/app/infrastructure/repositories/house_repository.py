@@ -119,6 +119,32 @@ class SQLiteHouseRepository(AbstractHouseRepository):
         except sqlite3.Error as error:
             raise RuntimeError(f"Error al obtener la lista de casas registradas: {error}")
 
+    def delete(self, house_id: int) -> bool:
+        """
+        Elimina una casa con sus nodos, alias y aristas en UNA transaccion.
+        nodes no tiene FK hacia houses, por eso se borra de forma explicita;
+        alias y aristas caen solos por el ON DELETE CASCADE de nodes.
+        """
+        try:
+            self._connection.execute("DELETE FROM nodes WHERE house_id = ?", (house_id,))
+            cursor = self._connection.execute("DELETE FROM houses WHERE id = ?", (house_id,))
+            self._connection.commit()
+            return cursor.rowcount > 0
+
+        except sqlite3.Error as error:
+            self._connection.rollback()
+            raise RuntimeError(f"Error al eliminar la casa {house_id}: {error}")
+
+    def count_nodes_by_house(self) -> dict[int, int]:
+        """Cuenta los nodos de cada casa."""
+        sql = "SELECT house_id, COUNT(*) AS total FROM nodes GROUP BY house_id"
+
+        try:
+            cursor = self._connection.execute(sql)
+            return {row["house_id"]: row["total"] for row in cursor.fetchall()}
+
+        except sqlite3.Error as error:
+            raise RuntimeError(f"Error al contar los nodos por casa: {error}")
 
     # -------------- Metodos privados (traduccion BD -> dominio) --------------
 

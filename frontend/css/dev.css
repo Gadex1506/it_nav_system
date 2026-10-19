@@ -1,0 +1,214 @@
+/* dev.css: Estilos propios del panel de desarrollo (se reusan variables de base.css) */
+
+.dev-link {
+	color: var(--ink);
+	font-weight: 700;
+}
+
+.dev-main {
+	max-width: 860px;
+	margin: 0 auto;
+	padding: 24px 16px 64px;
+	display: grid;
+	gap: 20px;
+}
+
+.dev-card {
+	background: var(--card);
+	border: 2px solid var(--ink);
+	border-radius: 10px;
+	padding: 20px;
+}
+
+.dev-card h2 {
+	margin: 0 0 12px;
+	font: 700 24px var(--serif);
+}
+
+.dev-hint {
+	color: var(--ink-soft);
+	margin: 0 0 12px;
+}
+
+.dev-warning {
+	background: var(--mustard);
+	border: 2px solid var(--ink);
+	border-radius: 8px;
+	padding: 10px 14px;
+	font-weight: 500;
+}
+
+.dev-row {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	align-items: center;
+}
+
+.dev-grid {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: 1fr 1fr auto;
+	align-items: end;
+}
+
+.dev-grid label,
+.dev-dialog label {
+	display: grid;
+	gap: 4px;
+	font-weight: 500;
+}
+
+input {
+	min-height: 44px;
+	padding: 0 12px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
+	background: #fff;
+	font: 400 16px var(--sans);
+	color: var(--ink);
+}
+
+#keyInput {
+	flex: 1;
+	min-width: 220px;
+}
+
+.dev-btn {
+	min-height: 44px;
+	padding: 0 18px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
+	background: var(--sage);
+	font: 700 16px var(--sans);
+}
+
+.dev-btn--ghost {
+	background: var(--card);
+}
+
+.dev-btn--danger {
+	background: var(--danger);
+	color: #fff;
+}
+
+.dev-btn:disabled {
+	opacity: .45;
+	cursor: not-allowed;
+}
+
+.dev-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.dev-table th,
+.dev-table td {
+	text-align: left;
+	padding: 10px 8px;
+	border-bottom: 1px solid var(--ink-soft);
+}
+
+.dev-badge {
+	margin-left: 8px;
+	padding: 2px 8px;
+	border: 2px solid var(--ink);
+	border-radius: 999px;
+	background: var(--blue);
+	font: 700 13px var(--sans);
+}
+
+.dev-dialog {
+	max-width: 480px;
+	border: 3px solid var(--ink);
+	border-radius: 10px;
+	background: var(--card);
+	color: var(--ink);
+}
+
+.dev-dialog {
+	box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+
+.dev-dialog::backdrop {
+	background: rgba(27, 42, 65, .5);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+}
+
+.dev-dialog h2 {
+	margin-top: 0;
+	font: 700 24px var(--serif);
+}
+
+.dev-dialog .dev-row {
+	margin-top: 16px;
+	justify-content: flex-end;
+}
+
+#toast {
+	position: fixed;
+	bottom: 24px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--ink);
+	color: var(--card);
+	padding: 12px 20px;
+	border-radius: 8px;
+	z-index: 60;
+}
+
+@media (max-width: 640px) {
+	.dev-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Pestanias de la pagina de desarrollo y formulario de dispositivos */
+
+.dev-tabs {
+	margin-bottom: 16px;
+	border-bottom: 2px solid var(--ink);
+}
+
+#housesView,
+#devicesView {
+	display: grid;
+	gap: 20px;
+}
+
+.dev-grid--devices {
+	grid-template-columns: 1fr 1fr;
+}
+
+.dev-grid--devices .dev-btn {
+	grid-column: 1 / -1;
+	justify-self: start;
+}
+
+select {
+	min-height: 44px;
+	padding: 0 10px;
+	border: 2px solid var(--ink);
+	border-radius: 6px;
+	background: #fff;
+	font: 400 16px var(--sans);
+	color: var(--ink);
+}
+
+.dev-table code {
+	font: 500 14px ui-monospace, Consolas, monospace;
+	background: var(--paper);
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+.dev-table .dev-row {
+	flex-wrap: nowrap;
+}
+
+.dev-btn--small {
+	min-height: 36px;
+	padding: 0 12px;
+	font-size: 14px;
+}

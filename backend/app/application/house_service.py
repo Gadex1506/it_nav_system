@@ -21,6 +21,7 @@ Principios SOLID aplicados:
 from typing import Optional
 from app.domain.models import House
 from app.domain.interfaces import AbstractHouseRepository
+from app.domain.exceptions import HouseDeletionNotConfirmedError
 
 class HouseService:
     """
@@ -114,3 +115,45 @@ class HouseService:
             )
         
         return house
+
+    def get_houses_overview(self) -> list[tuple[House, int]]:
+        """Retorna cada casa con su cantidad de nodos, ordenada por nombre."""
+        node_counts = self._repository.count_nodes_by_house()
+        return [(house, node_counts.get(house.id, 0)) for house in self._repository.get_all()]
+
+    def delete_house(self, house_id: int, confirm_name: str) -> House:
+        """
+        Elimina una casa con todo lo relacionado, exigiendo su nombre exacto.
+
+        Raises:
+            ValueError: Si la casa no existe.
+            HouseDeletionNotConfirmedError: Si el nombre no coincide.
+        """
+        house = self._repository.get_by_id(house_id)
+        if not house:
+            raise ValueError(f"No existe una casa con el ID: {house_id}.")
+
+        if confirm_name.strip() != house.name:
+            raise HouseDeletionNotConfirmedError(
+                "El nombre de confirmacion no coincide con el de la casa. No se elimino nada."
+            )
+
+        if not self._repository.delete(house_id):
+            raise ValueError(f"No existe una casa con el ID: {house_id}.")
+
+        return house
+
+    def get_active_house(self) -> House:
+        """
+        Retorna la casa activa: la existente con menor ID.
+        Asi no hace falta un ID fijo en config.py.
+
+        Raises:
+            ValueError: Si no hay ninguna casa registrada.
+        """
+        houses = self._repository.get_all()
+        if not houses:
+            raise ValueError(
+                "No hay ninguna casa registrada. Crea una desde el panel de desarrollo (dev.html)."
+            )
+        return min(houses, key=lambda house: house.id)

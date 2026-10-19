@@ -25,10 +25,8 @@ from app.presentation.schemas import(
     MessageResponse,
 )
 
-# CONFIG
-from app.config import ACTIVE_HOUSE_ID
-
 # SERVICES
+from app.application.house_service import HouseService
 from app.application.node_service import NodeService
 
 # INFRASTRUCTURE
@@ -63,6 +61,18 @@ def get_node_service() -> NodeService:
         SQLiteHouseRepository(connection)
     )
 
+def get_active_house_id() -> int:
+    """
+    Resuelve el ID de la casa activa (la de menor ID existente).
+
+    Raises:
+        HTTPException 404: Si no hay ninguna casa registrada.
+    """
+    service = HouseService(SQLiteHouseRepository(get_db()))
+    try:
+        return service.get_active_house().id
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
 
 # --- Endpoints de consulta ------------------------------------------
 
@@ -72,7 +82,8 @@ def get_node_service() -> NodeService:
     summary="Listar nodos de la casa activa"
 )
 async def get_nodes(
-    service: NodeService = Depends(get_node_service)
+    service: NodeService = Depends(get_node_service),
+    active_house_id: int = Depends(get_active_house_id)
 ) -> list[NodeResponse]:
     """
     Retorna todos los nodos activos de la casa configurada en el sistema.
@@ -81,7 +92,7 @@ async def get_nodes(
     pertenece esta instalacion mediante ACTIVE_HOUSE_ID en config.py.
     """
     try:
-        nodes = service.get_nodes_by_house(ACTIVE_HOUSE_ID)
+        nodes = service.get_nodes_by_house(active_house_id)
         return [_node_to_response(node) for node in nodes]
     except ValueError as error:
         raise HTTPException(
