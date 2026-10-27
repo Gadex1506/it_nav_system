@@ -20,8 +20,70 @@ import os;
 import pytest
 from fastapi.testclient import TestClient
 
+# Domain
+from app.domain.interfaces import AbstractDeviceGateway
+
+class FakeDeviceGateway(AbstractDeviceGateway):
+    """
+    Pasarela falsa para pruebas: guarda en una lista lo que se le pide
+    publicar y permite simular lo que contaria un ESP32. Asi las pruebas
+    no necesitan un broker MQTT real.
+    """
+
+    def __init__(self, connected: bool = True) -> None:
+        self.connected = connected
+        self.published: list[tuple[str, str]] = []
+        self.started = False
+        self.stopped = False
+        self._state_listener = None
+        self._availability_listener = None
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> None:
+        self.stopped = True
+
+    @property
+    def is_connected(self) -> bool:
+        return self.connected
+
+    def publish_light_command(self, device_key: str, state: str) -> None:
+        from app.domain.exceptions import GatewayUnavailableError
+        if not self.connected:
+            raise GatewayUnavailableError("Sin conexion (pasarela falsa).")
+        self.published.append((device_key, state))
+
+    def set_state_listener(self, listener) -> None:
+        self._state_listener = listener
+
+    def set_availability_listener(self, listener) -> None:
+        self._availability_listener = listener
+
+    # --- Ayudas de prueba: simulan al ESP32 ---
+    def emit_state(self, report) -> None:
+        self._state_listener(report)
+
+    def emit_availability(self, report) -> None:
+        self._availability_listener(report)
+
+
 @pytest.fixture()
-def client(tmp_path, monkeypatch):
+def fake_gateway(monkeypatch):
+    """
+    Reemplaza la pasarela real por una falsa y reinicia el almacen de
+    estados, para que ningun test toque un broker MQTT de verdad.
+    """
+    from app.application.device_state_store import DeviceStateStore
+    from app.infrastructure import gateway_provider
+
+    fake = FakeDeviceGateway()
+    monkeypatch.setattr(gateway_provider, "_gateway", fake)
+    monkeypatch.setattr(gateway_provider, "_state_store", DeviceStateStore())
+    return fake
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch, fake_gateway):
     """
     Crea un cliente de pruebas conectado a una base de datos temporal.
 
@@ -74,9 +136,7 @@ def client(tmp_path, monkeypatch):
         )
         assert response.status_code == 201, "No se pudo crear la casa de pruebas."
         test_client.headers.update({"X-Dev-Key": test_dev_key})
-
-    yield test_client
+        yield test_client
 
     # ----- Limpieza despues del test ------------------------------------------
     db.close()
-

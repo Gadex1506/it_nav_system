@@ -11,6 +11,7 @@ Principio SOLID aplicado:
     O (Open/Closed): Los valores se cambian aqui sin modificar
     ningun otro modulo del sistema.
 """
+import os
 from pathlib import Path
 
 # ─── Asistente de voz ────────────────────────────────────────────
@@ -50,3 +51,30 @@ DEVICE_TYPE_DOOR: str = "door" # Puerta de una habitacion
 VALID_DEVICE_TYPES: tuple = (DEVICE_TYPE_LIGHT, DEVICE_TYPE_DOOR)
 DEVICE_KEY_PATTERN: str = r"^[a-z0-9_]+$" # Solo minusculas, numeros y guion bajo (TENERLO EN CUENTA PARA EL MQTT)
 DEVICE_KEY_MAX_LENGTH: int = 50
+
+# ────────────────────────────────── MQTT ────────────────────────────────── 
+
+# ─── Luces: estados validos (igual que el contrato MQTT) ─────────────────
+LIGHT_STATE_ON: str = "on"
+LIGHT_STATE_OFF: str = "off"
+VALID_LIGHT_STATES: tuple = (LIGHT_STATE_ON, LIGHT_STATE_OFF)
+
+# ─── Disponibilidad de dispositivos (Last Will de MQTT) ──────────────────
+AVAILABILITY_ONLINE: str = "online"
+AVAILABILITY_OFFLINE: str = "offline"
+
+# ─── MQTT: pasarela hacia los ESP32 ──────────────────────────────────────
+# Los valores sensibles o que cambian de equipo en equipo se leen de
+# variables de entorno; si no existen se usan estos valores por defecto.
+MQTT_ENABLED: bool = os.getenv("INCLUSIVE_MQTT_ENABLED", "true").lower() == "true"
+MQTT_HOST: str = os.getenv("INCLUSIVE_MQTT_HOST", "localhost")
+MQTT_PORT: int = int(os.getenv("INCLUSIVE_MQTT_PORT", "1883"))
+MQTT_USERNAME: str = os.getenv("INCLUSIVE_MQTT_USER", "inclusive_backend")
+MQTT_PASSWORD_ENV_NAME: str = "INCLUSIVE_MQTT_PASSWORD"
+MQTT_PASSWORD_FILE_PATH = Path(__file__).resolve().parents[1] / "data" / "mqtt_password.txt"
+MQTT_CLIENT_ID: str = "inclusive-backend"
+MQTT_TOPIC_ROOT: str = "inclusive/casa1" # Raiz fija del contrato
+MQTT_QOS: int = 1 # Ordenes y estados: al menos una vez
+MQTT_KEEPALIVE_SECONDS: int = 30
+MQTT_RECONNECT_MIN_SECONDS: int = 1
+MQTT_RECONNECT_MAX_SECONDS: int = 30

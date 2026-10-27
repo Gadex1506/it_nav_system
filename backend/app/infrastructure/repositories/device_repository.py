@@ -108,6 +108,28 @@ class SQLiteDeviceRepository(AbstractDeviceRepository):
         except sqlite3.Error as error:
             raise RuntimeError(f"Error al buscar el dispositivo {device_id}: {error}")
 
+    def get_by_key(self, device_key: str) -> Optional[Device]:
+        """
+        Busca un dispositivo por su device_key.
+
+        Args:
+            device_key: Identificador fijo del contrato (ej: 'light_sala').
+
+        Returns:
+            El dispositivo encontrado o None si no existe.
+
+        Raises:
+            RuntimeError: Si ocurre un error al consultar la BD.
+        """
+        sql = "SELECT * FROM devices WHERE device_key = ?"
+
+        try:
+            row = self._connection.execute(sql, (device_key,)).fetchone()
+            return self._row_to_device(row) if row else None
+
+        except sqlite3.Error as error:
+            raise RuntimeError(f"Error al buscar el dispositivo '{device_key}': {error}")
+
     def get_all_by_house(
         self, house_id: int, device_type: Optional[str] = None
     ) -> list[Device]:

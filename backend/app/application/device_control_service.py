@@ -1,0 +1,133 @@
+"""
+app/application/device_control_service.py
+
+Servicio que da ordenes a los dispositivos fisicos y consulta su estado.
+
+Responsabilidad: Aplicar las reglas antes de enviar una orden (el
+dispositivo existe, es una luz, el estado es valido) y delegar el envio
+a la pasarela. No sabe nada de MQTT ni de HTTP.
+
+La orden es ASINCRONA: set_light() solo confirma que la orden salio.
+Que la luz realmente cambio lo dira el ESP32 publicando su estado, que
+se consulta con get_live_status(). Analogia: dejar una nota en la puerta
+del vecino; sabes que la dejaste, no que ya la leyo.
+
+Patrones aplicados:
+    - Facade: una operacion simple que coordina repositorio, pasarela y estado.
+    - Dependency Injection: todo llega por el constructor.
+"""
+
+from typing import Optional
+
+from app.config import DEVICE_TYPE_LIGHT, VALID_LIGHT_STATES
+from app.application.device_service import DeviceService
+from app.application.device_state_store import DeviceLiveStatus, DeviceStateStore
+from app.domain.exceptions import DeviceNotFoundError, GatewayUnavailableError
+from app.domain.interfaces import AbstractDeviceGateway
+from app.domain.models import Device
+
+
+class DeviceControlService:
+    """Da ordenes a las luces y consulta su ultimo estado conocido."""
+
+    def __init__(
+        self,
+        device_service: DeviceService,
+        gateway: AbstractDeviceGateway,
+        state_store: DeviceStateStore,
+    ) -> None:
+        """
+        Args:
+            device_service: Para buscar dispositivos por su device_key.
+            gateway: Pasarela por la que salen las ordenes.
+            state_store: Memoria con el ultimo estado conocido.
+        """
+        self._device_service = device_service
+        self._gateway = gateway
+        self._state_store = state_store
+
+    @property
+    def gateway_connected(self) -> bool:
+        """True si ahora mismo se pueden enviar ordenes."""
+        return self._gateway.is_connected
+
+    def set_light(self, device_key: str, state: str) -> Device:
+        """
+        Pide encender o apagar una luz.
+
+        Args:
+            device_key: Identificador de la luz (ej: 'light_sala').
+            state: 'on' u 'off'.
+
+        Returns:
+            El dispositivo al que se le envio la orden.
+
+        Raises:
+            ValueError: Si el estado no es valido o el dispositivo no es una luz.
+            DeviceNotFoundError: Si no existe un dispositivo con ese device_key.
+            GatewayUnavailableError: Si no se pudo enviar (broker apagado).
+        """
+        normalized_state = self._normalize_state(state)
+        device = self._get_light(device_key)
+
+        self._gateway.publish_light_command(device.device_key, normalized_state)
+        return device
+
+    def set_all_lights(self, house_id: int, state: str) -> list[str]:
+        """
+        Pide encender o apagar TODAS las luces de una casa.
+
+        Es lo que usara "apaga todas las luces". Si no hay conexion falla
+        antes de enviar nada, para no dejar la casa a medias.
+
+        Returns:
+            Los device_key a los que se envio la orden (vacio si no hay luces).
+
+        Raises:
+            ValueError: Si el estado no es valido.
+            GatewayUnavailableError: Si no hay conexion con el broker.
+        """
+        normalized_state = self._normalize_state(state)
+        lights = self._device_service.get_devices_by_house(house_id, DEVICE_TYPE_LIGHT)
+
+        if lights and not self._gateway.is_connected:
+            raise GatewayUnavailableError(
+                "No hay conexion con el broker MQTT; no se envio ninguna orden."
+            )
+
+        for light in lights:
+            self._gateway.publish_light_command(light.device_key, normalized_state)
+
+        return [light.device_key for light in lights]
+
+    def get_live_status(self, device_key: str) -> Optional[DeviceLiveStatus]:
+        """Ultimo estado conocido de un dispositivo, o None si nunca reporto."""
+        return self._state_store.get(device_key.strip().lower())
+
+    def get_all_live_status(self) -> list[DeviceLiveStatus]:
+        """Ultimo estado conocido de todos los dispositivos que han reportado."""
+        return self._state_store.get_all()
+
+    # ─── Utilidades internas ─────────────────────────────────────────────
+
+    @staticmethod
+    def _normalize_state(state: str) -> str:
+        normalized = (state or "").strip().lower()
+
+        if normalized not in VALID_LIGHT_STATES:
+            raise ValueError(
+                f"Estado invalido '{state}'. Valores permitidos: {', '.join(VALID_LIGHT_STATES)}."
+            )
+
+        return normalized
+
+    def _get_light(self, device_key: str) -> Device:
+        device = self._device_service.get_device_by_key(device_key or "")
+
+        if device is None:
+            raise DeviceNotFoundError(f"No existe un dispositivo con la clave '{device_key}'.")
+
+        if device.device_type != DEVICE_TYPE_LIGHT:
+            raise ValueError(f"El dispositivo '{device_key}' no es una luz.")
+
+        return device

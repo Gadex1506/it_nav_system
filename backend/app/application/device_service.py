@@ -87,6 +87,15 @@ class DeviceService:
         """
         return self._device_repository.get_by_id(device_id)
 
+    def get_device_by_key(self, device_key: str) -> Optional[Device]:
+        """
+        Busca un dispositivo por su device_key (identificador del contrato).
+
+        Returns:
+            El dispositivo o None si no existe.
+        """
+        return self._device_repository.get_by_key(device_key.strip().lower())
+
     def get_devices_by_house(
         self, house_id: int, device_type: Optional[str] = None
     ) -> list[Device]:

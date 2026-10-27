@@ -18,8 +18,9 @@ Principios SOLID aplicados:
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Callable, Optional
 from app.domain.models import House, Node, NodeAlias, NodeEdge, Device
+from app.domain.device_events import DeviceStateReport, DeviceAvailabilityReport
 
 class AbstractHouseRepository(ABC):
     """
@@ -265,6 +266,16 @@ class AbstractDeviceRepository(ABC):
         ...
 
     @abstractmethod
+    def get_by_key(self, device_key: str) -> Optional[Device]:
+        """
+        Busca un dispositivo por su device_key (identificador del contrato).
+
+        Returns:
+            El dispositivo encontrado o None si no existe.
+        """
+        ...
+
+    @abstractmethod
     def get_all_by_house(
         self, house_id: int, device_type: Optional[str] = None
     ) -> list[Device]:
@@ -316,4 +327,58 @@ class AbstractDeviceRepository(ABC):
         Returns:
             True si se elimino, False si no existia.
         """
+        ...
+
+# ─── Pasarela hacia los dispositivos fisicos ─────────────────────────────
+StateListener = Callable[[DeviceStateReport], None]
+AvailabilityListener = Callable[[DeviceAvailabilityReport], None]
+
+class AbstractDeviceGateway(ABC):
+    """
+    Contrato abstracto de la pasarela hacia luces y puertas fisicas.
+
+    La capa de aplicacion solo conoce esta interfaz. Que por debajo
+    se use MQTT, otro protocolo o un simulador en memoria es un
+    detalle de infraestructura.
+
+    Principios SOLID aplicados:
+        - D: La aplicacion depende de esta abstraccion, no de MQTT.
+        - I: Solo dispositivos fijos (luces y puertas). El robot tendra
+        su propia interfaz (AbstractRobotGateway) mas adelante.
+    """
+
+    @abstractmethod
+    def start(self) -> None:
+        """Inicia la conexion. No debe lanzar error si el broker esta apagado."""
+        ...
+
+    @abstractmethod
+    def stop(self) -> None:
+        """Cierra la conexion de forma ordenada."""
+        ...
+
+    @property
+    @abstractmethod
+    def is_connected(self) -> bool:
+        """True si la pasarela puede enviar ordenes en este momento."""
+        ...
+
+    @abstractmethod
+    def publish_light_command(self, device_key: str, state: str) -> None:
+        """
+        Envia la orden de encender o apagar una luz.
+
+        Raises:
+            GatewayUnavailableError: Si no se pudo enviar la orden.
+        """
+        ...
+
+    @abstractmethod
+    def set_state_listener(self, listener: StateListener) -> None:
+        """Registra quien recibe los estados que publican los dispositivos."""
+        ...
+
+    @abstractmethod
+    def set_availability_listener(self, listener: AvailabilityListener) -> None:
+        """Registra quien recibe los avisos online/offline de los dispositivos."""
         ...

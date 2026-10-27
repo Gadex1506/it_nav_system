@@ -15,16 +15,23 @@ Principio SOLID aplicado:
 """
 
 import uvicorn
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Infrastructure
 from app.infrastructure.database import db
-from app.config import ASSISTANT_NAME, ADMIN_PANEL_DIR
 from app.infrastructure.dev_key_store import dev_key_store
+from app.infrastructure.gateway_provider import start_gateway, stop_gateway
+
+# Config
+from app.config import ASSISTANT_NAME, ADMIN_PANEL_DIR
 
 # # --- Importar Routers ------------------------------------------
 from app.presentation.routers.dev_router import router as dev_router
 from app.presentation.routers.user_router import router as user_router
+from app.presentation.routers.gateway_router import router as gateway_router
 
 # =============================================================
 # Ciclo de vida de la aplicacion (Startup y Shutdown)
@@ -41,6 +48,8 @@ async def lifespan(app: FastAPI):
         app: Instancia de FastAPI. Es requerido por el decorador @app.on_event.
     """
 
+    logging.basicConfig(level=logging.INFO)
+
     # ── Inicio del servidor ──
     print(f"Iniciando la API del Sistema de Navegacion de Inclusive Tech - Asistente: {ASSISTANT_NAME}")
     db.initialize_schema()
@@ -48,7 +57,11 @@ async def lifespan(app: FastAPI):
 
     dev_key_store.ensure_exists()
 
+    start_gateway()
+
     yield # El servidor esta corriendo aqui
+
+    stop_gateway()
 
     # ── Cierre del servidor ──
     db.close()
@@ -88,6 +101,7 @@ app.add_middleware(
 
 app.include_router(dev_router)
 app.include_router(user_router)
+app.include_router(gateway_router)
 
 # =============================================================
 # Endpoint de salud

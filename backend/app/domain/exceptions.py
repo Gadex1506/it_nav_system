@@ -23,3 +23,17 @@ class DeviceKeyAlreadyExistsError(Exception):
     El device_key es el identificador fijo que usa el contrato MQTT para el casod de las luces y puertas
     (por ejemplo 'light_living'), por eso no puede repetirse.
     """
+
+class DeviceNotFoundError(Exception):
+    """
+    No existe ningun dispositivo con ese device_key.
+    """
+
+
+class GatewayUnavailableError(Exception):
+    """
+    La pasarela hacia los dispositivos fisicos no puede enviar la orden.
+
+    Ocurre cuando el broker MQTT esta apagado, no hay conexion o la
+    pasarela esta deshabilitada. La capa de presentacion la traduce a 503.
+    """
