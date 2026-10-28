@@ -41,7 +41,7 @@ def _clear_retained(device_key):
     import paho.mqtt.client as mqtt
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"clean-{device_key}")
     client.username_pw_set(os.getenv("INCLUSIVE_TEST_MQTT_ESP_USER", ""),
-                           os.getenv("INCLUSIVE_TEST_MQTT_ESP_PASSWORD", ""))
+                        os.getenv("INCLUSIVE_TEST_MQTT_ESP_PASSWORD", ""))
     client.connect(HOST, PORT)
     client.loop_start()
     for kind in ("state", "availability"):
@@ -105,7 +105,7 @@ def _clear_board():
     import paho.mqtt.client as mqtt
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="clean-board")
     client.username_pw_set(os.getenv("INCLUSIVE_TEST_MQTT_ESP_USER", ""),
-                           os.getenv("INCLUSIVE_TEST_MQTT_ESP_PASSWORD", ""))
+                        os.getenv("INCLUSIVE_TEST_MQTT_ESP_PASSWORD", ""))
     client.connect(HOST, PORT)
     client.loop_start()
     client.publish("inclusive/casa1/boards/casa/availability", b"", qos=1, retain=True).wait_for_publish(2)
@@ -145,7 +145,7 @@ def test_power_cut_takes_down_ALL_devices_with_one_last_will(backend, device_key
     board.simulate_power_cut()
 
     assert _wait_until(lambda: store.get(device_key).online is False
-                       and store.get(other_key).online is False)
+                    and store.get(other_key).online is False)
     _clear_retained(other_key)
 
 
