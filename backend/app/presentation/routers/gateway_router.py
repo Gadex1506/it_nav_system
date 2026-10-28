@@ -21,6 +21,8 @@ from app.presentation.gateway_schemas import (
     GatewayStatusResponse,
     LightCommandRequest,
     LightCommandResponse,
+    DoorCommandRequest,
+    DoorCommandResponse,
 )
 from app.presentation.security import require_dev_key
 
@@ -83,6 +85,36 @@ async def set_light(
         message="Orden enviada. El estado real lo confirmara el dispositivo.",
     )
 
+@router.post(
+    "/doors/{device_key}",
+    response_model=DoorCommandResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Abrir o cerrar una puerta fisica",
+)
+async def set_door(
+    device_key: str,
+    request: DoorCommandRequest,
+    service: DeviceControlService = Depends(get_device_control_service),
+) -> DoorCommandResponse:
+    """Envia la orden. 202 = la orden salio; el estado real lo confirma el dispositivo."""
+    try:
+        device = service.set_door(device_key, request.action, request.hold_ms)
+
+    except DeviceNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
+
+    except GatewayUnavailableError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error))
+
+    return DoorCommandResponse(
+        device_key=device.device_key,
+        requested_action=request.action.strip().lower(),
+        hold_ms=request.hold_ms,
+        message="Orden enviada. El estado real lo confirmara el dispositivo.",
+    )
 
 @router.get(
     "/status",

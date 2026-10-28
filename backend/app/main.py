@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     db.initialize_schema()
     print("Base de datos inicializada correctamente.")
 
-    dev_key_store.ensure_exists()
+    dev_key_store.log_status()
 
     start_gateway()
 

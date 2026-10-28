@@ -11,11 +11,13 @@ Patron aplicado:
 """
 
 import logging
+from typing import Optional
 
 from app.domain.exceptions import GatewayUnavailableError
 from app.domain.interfaces import (
     AbstractDeviceGateway,
     AvailabilityListener,
+    BoardAvailabilityListener,
     StateListener,
 )
 
@@ -38,8 +40,14 @@ class OfflineDeviceGateway(AbstractDeviceGateway):
     def publish_light_command(self, device_key: str, state: str) -> None:
         raise GatewayUnavailableError("La pasarela MQTT esta deshabilitada.")
 
+    def publish_door_command(self, device_key: str, action: str, hold_ms: Optional[int] = None) -> None:
+        raise GatewayUnavailableError("La pasarela MQTT esta deshabilitada.")
+
     def set_state_listener(self, listener: StateListener) -> None:
         return None
 
     def set_availability_listener(self, listener: AvailabilityListener) -> None:
+        return None
+
+    def set_board_availability_listener(self, listener: BoardAvailabilityListener) -> None:
         return None

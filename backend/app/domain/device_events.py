@@ -43,3 +43,21 @@ class DeviceAvailabilityReport:
 
     device_key: str
     online: bool
+
+
+@dataclass(frozen=True)
+class BoardAvailabilityReport:
+    """
+    Aviso de conexion de una PLACA ESP32 (su Last Will de MQTT).
+
+    Una placa maneja varios dispositivos (luces y puertas) con una sola
+    conexion, y una conexion solo tiene un Last Will. Por eso la caida se
+    avisa por la placa y no por cada dispositivo.
+
+    Attributes:
+        board_id: Identificador de la placa (ej: 'casa').
+        online: True si esta conectada, False si se cayo.
+    """
+
+    board_id: str
+    online: bool

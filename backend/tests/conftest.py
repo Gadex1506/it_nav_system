@@ -18,10 +18,13 @@ Principio SOLID aplicado:
 
 import os;
 import pytest
+from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
 # Domain
 from app.domain.interfaces import AbstractDeviceGateway
+
+load_dotenv()
 
 class FakeDeviceGateway(AbstractDeviceGateway):
     """
@@ -33,10 +36,12 @@ class FakeDeviceGateway(AbstractDeviceGateway):
     def __init__(self, connected: bool = True) -> None:
         self.connected = connected
         self.published: list[tuple[str, str]] = []
+        self.published_doors: list = []
         self.started = False
         self.stopped = False
         self._state_listener = None
         self._availability_listener = None
+        self._board_listener = None
 
     def start(self) -> None:
         self.started = True
@@ -54,11 +59,20 @@ class FakeDeviceGateway(AbstractDeviceGateway):
             raise GatewayUnavailableError("Sin conexion (pasarela falsa).")
         self.published.append((device_key, state))
 
+    def publish_door_command(self, device_key: str, action: str, hold_ms=None) -> None:
+        from app.domain.exceptions import GatewayUnavailableError
+        if not self.connected:
+            raise GatewayUnavailableError("Sin conexion (pasarela falsa).")
+        self.published_doors.append((device_key, action, hold_ms))
+
     def set_state_listener(self, listener) -> None:
         self._state_listener = listener
 
     def set_availability_listener(self, listener) -> None:
         self._availability_listener = listener
+
+    def set_board_availability_listener(self, listener) -> None:
+            self._board_listener = listener
 
     # --- Ayudas de prueba: simulan al ESP32 ---
     def emit_state(self, report) -> None:
@@ -66,6 +80,9 @@ class FakeDeviceGateway(AbstractDeviceGateway):
 
     def emit_availability(self, report) -> None:
         self._availability_listener(report)
+
+    def emit_board_availability(self, report) -> None:
+        self._board_listener(report)
 
 
 @pytest.fixture()
@@ -119,9 +136,8 @@ def client(tmp_path, monkeypatch, fake_gateway):
 
     # Clave de desarrollador temporal: nunca se toca la clave real
     from app.infrastructure.dev_key_store import dev_key_store
-    monkeypatch.setattr(dev_key_store, "_file_path", tmp_path / "dev_key_test.txt")
-    monkeypatch.setattr(dev_key_store, "_cached_key", None)
-    test_dev_key, _ = dev_key_store.ensure_exists()
+    test_dev_key = "clave-de-prueba-solo-para-tests-0123456789"
+    monkeypatch.setattr(dev_key_store, "_key", test_dev_key)
 
     from app.main import app as fastapi_app
 

@@ -1,13 +1,13 @@
 """
 app/application/device_control_service.py
 
-Servicio que da ordenes a los dispositivos fisicos y consulta su estado.
+Servicio que da ordenes a los dispositivos fisicos (luces y puertas) y consulta su estado.
 
 Responsabilidad: Aplicar las reglas antes de enviar una orden (el
-dispositivo existe, es una luz, el estado es valido) y delegar el envio
+dispositivo existe, es del tipo correcto, el estado o la accion son validos) y delegar el envio
 a la pasarela. No sabe nada de MQTT ni de HTTP.
 
-La orden es ASINCRONA: set_light() solo confirma que la orden salio.
+La orden es ASINCRONA: set_light() y set_door() solo confirman que la orden salio.
 Que la luz realmente cambio lo dira el ESP32 publicando su estado, que
 se consulta con get_live_status(). Analogia: dejar una nota en la puerta
 del vecino; sabes que la dejaste, no que ya la leyo.
@@ -19,7 +19,15 @@ Patrones aplicados:
 
 from typing import Optional
 
-from app.config import DEVICE_TYPE_LIGHT, VALID_LIGHT_STATES
+from app.config import (
+    DEVICE_TYPE_DOOR,
+    DEVICE_TYPE_LIGHT,
+    DOOR_ACTION_OPEN,
+    DOOR_HOLD_MS_MAX,
+    DOOR_HOLD_MS_MIN,
+    VALID_DOOR_ACTIONS,
+    VALID_LIGHT_STATES,
+)
 from app.application.device_service import DeviceService
 from app.application.device_state_store import DeviceLiveStatus, DeviceStateStore
 from app.domain.exceptions import DeviceNotFoundError, GatewayUnavailableError
@@ -28,7 +36,7 @@ from app.domain.models import Device
 
 
 class DeviceControlService:
-    """Da ordenes a las luces y consulta su ultimo estado conocido."""
+    """Da ordenes a las luces y puertas y consulta su ultimo estado conocido."""
 
     def __init__(
         self,
@@ -68,9 +76,34 @@ class DeviceControlService:
             GatewayUnavailableError: Si no se pudo enviar (broker apagado).
         """
         normalized_state = self._normalize_state(state)
-        device = self._get_light(device_key)
+        device = self._get_device(device_key, DEVICE_TYPE_LIGHT, "una luz")
 
         self._gateway.publish_light_command(device.device_key, normalized_state)
+        return device
+
+    def set_door(self, device_key: str, action: str, hold_ms: Optional[int] = None) -> Device:
+        """
+        Pide abrir o cerrar una puerta.
+
+        Args:
+            device_key: Identificador de la puerta (ej: 'door_cuarto_principal').
+            action: 'open' o 'close'.
+            hold_ms: Cierre de seguridad en ms (solo con 'open'). Si se omite,
+                el ESP32 usa su valor por defecto.
+
+        Returns:
+            El dispositivo al que se le envio la orden.
+
+        Raises:
+            ValueError: Si la accion o hold_ms no son validos, o el dispositivo no es una puerta.
+            DeviceNotFoundError: Si no existe un dispositivo con ese device_key.
+            GatewayUnavailableError: Si no se pudo enviar (broker apagado).
+        """
+        normalized_action = self._normalize_door_action(action)
+        self._validate_hold_ms(normalized_action, hold_ms)
+        device = self._get_device(device_key, DEVICE_TYPE_DOOR, "una puerta")
+
+        self._gateway.publish_door_command(device.device_key, normalized_action, hold_ms)
         return device
 
     def set_all_lights(self, house_id: int, state: str) -> list[str]:
@@ -121,13 +154,39 @@ class DeviceControlService:
 
         return normalized
 
-    def _get_light(self, device_key: str) -> Device:
+    @staticmethod
+    def _normalize_door_action(action: str) -> str:
+        normalized = (action or "").strip().lower()
+
+        if normalized not in VALID_DOOR_ACTIONS:
+            raise ValueError(
+                f"Accion invalida '{action}'. Valores permitidos: {', '.join(VALID_DOOR_ACTIONS)}."
+            )
+
+        return normalized
+
+    @staticmethod
+    def _validate_hold_ms(action: str, hold_ms: Optional[int]) -> None:
+        """hold_ms solo tiene sentido al abrir y debe estar en un rango razonable."""
+        if hold_ms is None:
+            return
+
+        if action != DOOR_ACTION_OPEN:
+            raise ValueError("hold_ms solo se puede usar con la accion 'open'.")
+
+        if not DOOR_HOLD_MS_MIN <= hold_ms <= DOOR_HOLD_MS_MAX:
+            raise ValueError(
+                f"hold_ms debe estar entre {DOOR_HOLD_MS_MIN} y {DOOR_HOLD_MS_MAX} milisegundos."
+            )
+
+    def _get_device(self, device_key: str, expected_type: str, type_label: str) -> Device:
+        """Busca un dispositivo y comprueba que sea del tipo esperado."""
         device = self._device_service.get_device_by_key(device_key or "")
 
         if device is None:
             raise DeviceNotFoundError(f"No existe un dispositivo con la clave '{device_key}'.")
 
-        if device.device_type != DEVICE_TYPE_LIGHT:
-            raise ValueError(f"El dispositivo '{device_key}' no es una luz.")
+        if device.device_type != expected_type:
+            raise ValueError(f"El dispositivo '{device_key}' no es {type_label}.")
 
         return device

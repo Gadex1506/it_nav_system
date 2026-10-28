@@ -15,3 +15,6 @@ __pycache__/
 
 # Variables de entorno
 .env
+
+# Ignorar datos sensibles
+simulator/esp32_password.txt

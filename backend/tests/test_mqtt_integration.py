@@ -18,6 +18,7 @@ placa: recibe la orden en el tema /set y responde en /state.
 import os
 import queue
 import time
+import uuid
 
 import paho.mqtt.client as mqtt
 import pytest
@@ -84,36 +85,45 @@ def fake_esp32():
     client.disconnect()
 
 
-def test_command_reaches_esp32_with_contract_topic_and_payload(gateway, fake_esp32):
-    gateway.publish_light_command("light_sala", "on")
+@pytest.fixture()
+def device_key(fake_esp32):
+    """Clave unica por prueba; al terminar borra sus mensajes retenidos."""
+    key = f"light_t{uuid.uuid4().hex[:8]}"
+    yield key
+    for kind in ("state", "availability"):
+        fake_esp32.publish(f"inclusive/casa1/devices/{key}/{kind}", b"", qos=1, retain=True)
+    time.sleep(0.2)
+
+
+def test_command_reaches_esp32_with_contract_topic_and_payload(gateway, fake_esp32, device_key):
+    gateway.publish_light_command(device_key, "on")
 
     topic, payload = fake_esp32.commands.get(timeout=WAIT_SECONDS)
 
-    assert topic == "inclusive/casa1/devices/light_sala/set"
+    assert topic == f"inclusive/casa1/devices/{device_key}/set"
     assert payload == b'{"state":"on"}'
 
 
-def test_state_and_availability_from_esp32_reach_listeners(gateway, fake_esp32):
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/availability", "online", qos=1, retain=True)
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/state",
+def test_state_and_availability_from_esp32_reach_listeners(gateway, fake_esp32, device_key):
+    fake_esp32.publish(f"inclusive/casa1/devices/{device_key}/availability", "online", qos=1, retain=True)
+    fake_esp32.publish(f"inclusive/casa1/devices/{device_key}/state",
                        '{"state":"on","ts_ms":48213}', qos=1, retain=True)
 
-    assert _wait_until(lambda: gateway.received_states and gateway.received_availability)
-    assert gateway.received_states[-1].state == "on"
-    assert gateway.received_states[-1].timestamp_ms == 48213
-    assert gateway.received_availability[-1].online is True
+    def mine(reports):
+        return [r for r in reports if r.device_key == device_key]
 
-    # Dejar el broker limpio (borra los mensajes retenidos de la prueba)
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/availability", b"", qos=1, retain=True)
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/state", b"", qos=1, retain=True)
+    assert _wait_until(lambda: mine(gateway.received_states) and mine(gateway.received_availability))
+    assert mine(gateway.received_states)[-1].state == "on"
+    assert mine(gateway.received_states)[-1].timestamp_ms == 48213
+    assert mine(gateway.received_availability)[-1].online is True
 
 
-def test_garbage_message_does_not_kill_the_gateway(gateway, fake_esp32):
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/state", "esto no es json", qos=1)
-    fake_esp32.publish("inclusive/casa1/devices/light_sala/state", '{"state":"off"}', qos=1)
+def test_garbage_message_does_not_kill_the_gateway(gateway, fake_esp32, device_key):
+    fake_esp32.publish(f"inclusive/casa1/devices/{device_key}/state", "esto no es json", qos=1)
+    fake_esp32.publish(f"inclusive/casa1/devices/{device_key}/state", '{"state":"off"}', qos=1)
 
-    assert _wait_until(lambda: gateway.received_states)
-    assert gateway.received_states[-1].state == "off"
+    assert _wait_until(lambda: [r for r in gateway.received_states if r.device_key == device_key])
+    assert [r for r in gateway.received_states if r.device_key == device_key][-1].state == "off"
     assert gateway.is_connected
 
 

@@ -5,7 +5,7 @@ Pasarela real hacia luces y puertas usando MQTT (libreria paho-mqtt).
 
 Responsabilidad: Mantener la conexion con el broker, publicar las
 ordenes del backend y entregar al resto del sistema lo que los ESP32
-cuentan (estado y disponibilidad). No decide NADA de logica de negocio.
+cuentan (estado y disponibilidad). No decide NADA de negocio.
 
 Decisiones importantes:
     - Si el broker esta apagado el backend arranca igual: paho reintenta
@@ -29,6 +29,7 @@ from app.domain.exceptions import GatewayUnavailableError
 from app.domain.interfaces import (
     AbstractDeviceGateway,
     AvailabilityListener,
+    BoardAvailabilityListener,
     StateListener,
 )
 from app.infrastructure import mqtt_protocol
@@ -55,6 +56,7 @@ class MqttDeviceGateway(AbstractDeviceGateway):
         self._connected = threading.Event()
         self._state_listener: Optional[StateListener] = None
         self._availability_listener: Optional[AvailabilityListener] = None
+        self._board_listener: Optional[BoardAvailabilityListener] = None
 
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
@@ -86,7 +88,7 @@ class MqttDeviceGateway(AbstractDeviceGateway):
                 self._settings.host, self._settings.port,
             )
         except Exception as error:
-            # Cualquier fallo aqui no deberia impedir que el backend arranque
+            # Cualquier fallo aqui no debe impedir que el backend arranque
             logger.error("No se pudo iniciar la pasarela MQTT: %s", error)
 
     def stop(self) -> None:
@@ -106,14 +108,29 @@ class MqttDeviceGateway(AbstractDeviceGateway):
     # ─── Ordenes (backend -> ESP32) ──────────────────────────────────────
 
     def publish_light_command(self, device_key: str, state: str) -> None:
+        self._publish_order(
+            mqtt_protocol.light_set_topic(device_key),
+            mqtt_protocol.encode_light_command(state),
+            device_key,
+        )
+
+    def publish_door_command(self, device_key: str, action: str, hold_ms: Optional[int] = None) -> None:
+        self._publish_order(
+            mqtt_protocol.door_set_topic(device_key),
+            mqtt_protocol.encode_door_command(action, hold_ms),
+            device_key,
+        )
+
+    def _publish_order(self, topic: str, payload: bytes, device_key: str) -> None:
+        """Publica una orden (comun a luces y puertas)."""
         if not self.is_connected:
             raise GatewayUnavailableError(
                 "No hay conexion con el broker MQTT; la orden no se envio."
             )
 
         result = self._client.publish(
-            mqtt_protocol.light_set_topic(device_key),
-            mqtt_protocol.encode_light_command(state),
+            topic,
+            payload,
             qos=self._settings.qos,
             retain=False,  # una orden vieja no debe repetirse al reconectar
         )
@@ -131,6 +148,9 @@ class MqttDeviceGateway(AbstractDeviceGateway):
     def set_availability_listener(self, listener: AvailabilityListener) -> None:
         self._availability_listener = listener
 
+    def set_board_availability_listener(self, listener: BoardAvailabilityListener) -> None:
+        self._board_listener = listener
+
     # ─── Callbacks de paho (se ejecutan en el hilo de red) ───────────────
 
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
@@ -145,6 +165,7 @@ class MqttDeviceGateway(AbstractDeviceGateway):
         client.subscribe([
             (mqtt_protocol.state_subscription_topic(), self._settings.qos),
             (mqtt_protocol.availability_subscription_topic(), self._settings.qos),
+            (mqtt_protocol.board_availability_subscription_topic(), self._settings.qos),
         ])
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties) -> None:
@@ -164,6 +185,12 @@ class MqttDeviceGateway(AbstractDeviceGateway):
 
     def _dispatch(self, topic: str, payload: bytes) -> None:
         """Interpreta un mensaje recibido y avisa al oyente correspondiente."""
+        board = mqtt_protocol.parse_board_topic(topic)
+
+        if board is not None:
+            self._dispatch_board(board, payload)
+            return
+
         parsed = mqtt_protocol.parse_device_topic(topic)
 
         if parsed is None:
@@ -181,3 +208,14 @@ class MqttDeviceGateway(AbstractDeviceGateway):
             report = mqtt_protocol.decode_availability_payload(device_key, payload)
             if report is not None:
                 self._availability_listener(report)
+
+    def _dispatch_board(self, board: tuple[str, str], payload: bytes) -> None:
+        """Atiende los mensajes de una placa (por ahora solo su disponibilidad)."""
+        board_id, topic_kind = board
+
+        if topic_kind != mqtt_protocol.TOPIC_AVAILABILITY or not self._board_listener:
+            return
+
+        report = mqtt_protocol.decode_board_availability_payload(board_id, payload)
+        if report is not None:
+            self._board_listener(report)

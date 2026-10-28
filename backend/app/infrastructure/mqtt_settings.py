@@ -5,8 +5,7 @@ Ajustes de conexion al broker MQTT.
 
 Responsabilidad: Reunir en un solo objeto los datos para conectarse
 (direccion, usuario, clave...). La clave NUNCA vive en el codigo:
-se lee de la variable de entorno INCLUSIVE_MQTT_PASSWORD o, si no
-existe, del archivo data/mqtt_password.txt (que no se sube al repositorio).
+se lee de la variable de entorno INCLUSIVE_MQTT_PASSWORD.
 """
 
 import os
@@ -31,24 +30,8 @@ class MqttSettings:
 
 
 def _read_password() -> str:
-    """
-    Busca la clave primero en la variable de entorno y luego en el archivo.
-
-    Returns:
-        La clave, o texto vacio si no se encontro (el broker la rechazara
-        y el error quedara en el log).
-    """
-    from_env = os.getenv(config.MQTT_PASSWORD_ENV_NAME)
-
-    if from_env is not None:
-        return from_env.strip()
-
-    password_file = config.MQTT_PASSWORD_FILE_PATH
-
-    if password_file.exists():
-        return password_file.read_text(encoding="utf-8").strip()
-
-    return ""
+    """Lee la clave del broker desde la variable de entorno (cargada del .env)."""
+    return os.getenv(config.MQTT_PASSWORD_ENV_NAME, "").strip()
 
 
 def load_mqtt_settings() -> MqttSettings:

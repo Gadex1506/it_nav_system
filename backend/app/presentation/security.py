@@ -19,7 +19,7 @@ from app.infrastructure.dev_key_store import dev_key_store
 _api_key_header = APIKeyHeader(
     name=DEV_KEY_HEADER_NAME,
     auto_error=False,
-    description="Clave de desarrollador (contenido de data/dev_access_key.txt)",
+    description="Clave de desarrollador (variable INCLUSIVE_DEV_KEY del archivo .env)",
 )
 
 
@@ -30,6 +30,12 @@ def require_dev_key(provided_key: Optional[str] = Security(_api_key_header)) -> 
     Raises:
         HTTPException 401: Si la clave falta o es incorrecta.
     """
+    if not dev_key_store.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El servidor no tiene INCLUSIVE_DEV_KEY configurada en el .env.",
+        )
+    
     if not dev_key_store.verify(provided_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

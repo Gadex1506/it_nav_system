@@ -37,3 +37,22 @@ class GatewayStatusResponse(BaseModel):
 
     connected: bool
     devices: list[DeviceLiveStatusResponse]
+
+class DoorCommandRequest(BaseModel):
+    """Orden para una puerta."""
+
+    action: str = Field(..., description="'open' para abrir, 'close' para cerrar")
+    hold_ms: Optional[int] = Field(
+        None,
+        description="Cierre de seguridad en milisegundos (solo con 'open'). Si se omite, "
+        "la puerta usa su valor por defecto.",
+    )
+
+
+class DoorCommandResponse(BaseModel):
+    """Confirmacion de que la orden SALIO (no de que la puerta ya se movio)."""
+
+    device_key: str
+    requested_action: str
+    hold_ms: Optional[int] = None
+    message: str

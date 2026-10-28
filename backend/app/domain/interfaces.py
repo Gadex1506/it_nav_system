@@ -20,7 +20,7 @@ Principios SOLID aplicados:
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
 from app.domain.models import House, Node, NodeAlias, NodeEdge, Device
-from app.domain.device_events import DeviceStateReport, DeviceAvailabilityReport
+from app.domain.device_events import (BoardAvailabilityReport, DeviceAvailabilityReport, DeviceStateReport)
 
 class AbstractHouseRepository(ABC):
     """
@@ -332,6 +332,7 @@ class AbstractDeviceRepository(ABC):
 # ─── Pasarela hacia los dispositivos fisicos ─────────────────────────────
 StateListener = Callable[[DeviceStateReport], None]
 AvailabilityListener = Callable[[DeviceAvailabilityReport], None]
+BoardAvailabilityListener = Callable[[BoardAvailabilityReport], None]
 
 class AbstractDeviceGateway(ABC):
     """
@@ -374,6 +375,16 @@ class AbstractDeviceGateway(ABC):
         ...
 
     @abstractmethod
+    def publish_door_command(self, device_key: str, action: str, hold_ms: Optional[int] = None) -> None:
+        """
+        Envia la orden de abrir o cerrar una puerta.
+
+        Raises:
+            GatewayUnavailableError: Si no se pudo enviar la orden.
+        """
+        ...
+
+    @abstractmethod
     def set_state_listener(self, listener: StateListener) -> None:
         """Registra quien recibe los estados que publican los dispositivos."""
         ...
@@ -381,4 +392,9 @@ class AbstractDeviceGateway(ABC):
     @abstractmethod
     def set_availability_listener(self, listener: AvailabilityListener) -> None:
         """Registra quien recibe los avisos online/offline de los dispositivos."""
+        ...
+
+    @abstractmethod
+    def set_board_availability_listener(self, listener: BoardAvailabilityListener) -> None:
+        """Registra quien recibe los avisos online/offline de las PLACAS (Last Will)."""
         ...

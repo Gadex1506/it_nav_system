@@ -13,6 +13,11 @@ Principio SOLID aplicado:
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Carga el archivo .env (busca hacia arriba desde esta carpeta). Si una
+# variable ya existe en el sistema, esa gana sobre la del .env.
+load_dotenv()
 
 # ─── Asistente de voz ────────────────────────────────────────────
 ASSISTANT_NAME: str = "Mia"
@@ -42,8 +47,9 @@ ADMIN_PANEL_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 # ─── Constantes para la clave de desarrollador ─────────────────────────────────────
 DEV_KEY_HEADER_NAME = "X-Dev-Key"
-DEV_KEY_FILE_PATH = Path(__file__).resolve().parents[1] / "data" / "dev_access_key.txt"
-DEV_KEY_BYTES = 24
+DEV_KEY_ENV_NAME = "INCLUSIVE_DEV_KEY"       # Nombre de la variable en el .env
+DEV_KEY_MIN_LENGTH = 16                      # Una clave mas corta se considera debil
+DEV_ACCESS_KEY: str = os.getenv(DEV_KEY_ENV_NAME, "").strip()
 
 # ─── Dispositivos (luces y puertas) ─────────────────────────────────────
 DEVICE_TYPE_LIGHT: str = "light" # Luz de una habitacion (una unidad que se controla)
@@ -59,6 +65,13 @@ LIGHT_STATE_ON: str = "on"
 LIGHT_STATE_OFF: str = "off"
 VALID_LIGHT_STATES: tuple = (LIGHT_STATE_ON, LIGHT_STATE_OFF)
 
+# ─── Puertas: acciones validas (igual que el contrato MQTT) ──────────────
+DOOR_ACTION_OPEN: str = "open"
+DOOR_ACTION_CLOSE: str = "close"
+VALID_DOOR_ACTIONS: tuple = (DOOR_ACTION_OPEN, DOOR_ACTION_CLOSE)
+DOOR_HOLD_MS_MIN: int = 1000   # hold_ms = cierre de seguridad; menos de 1 s es casi seguro un error de tipeo
+DOOR_HOLD_MS_MAX: int = 60000  # mas de 1 minuto abierta ya no es "seguro", es un olvido
+
 # ─── Disponibilidad de dispositivos (Last Will de MQTT) ──────────────────
 AVAILABILITY_ONLINE: str = "online"
 AVAILABILITY_OFFLINE: str = "offline"
@@ -71,9 +84,9 @@ MQTT_HOST: str = os.getenv("INCLUSIVE_MQTT_HOST", "localhost")
 MQTT_PORT: int = int(os.getenv("INCLUSIVE_MQTT_PORT", "1883"))
 MQTT_USERNAME: str = os.getenv("INCLUSIVE_MQTT_USER", "inclusive_backend")
 MQTT_PASSWORD_ENV_NAME: str = "INCLUSIVE_MQTT_PASSWORD"
-MQTT_PASSWORD_FILE_PATH = Path(__file__).resolve().parents[1] / "data" / "mqtt_password.txt"
 MQTT_CLIENT_ID: str = "inclusive-backend"
 MQTT_TOPIC_ROOT: str = "inclusive/casa1" # Raiz fija del contrato
+MQTT_HOUSE_BOARD_ID: str = "casa"        # Placa ESP32 que maneja las luces y puertas (contrato v0.3)
 MQTT_QOS: int = 1 # Ordenes y estados: al menos una vez
 MQTT_KEEPALIVE_SECONDS: int = 30
 MQTT_RECONNECT_MIN_SECONDS: int = 1

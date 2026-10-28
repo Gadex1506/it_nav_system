@@ -21,12 +21,17 @@ import re
 from typing import Optional
 
 from app import config
-from app.domain.device_events import DeviceAvailabilityReport, DeviceStateReport
+from app.domain.device_events import (
+    BoardAvailabilityReport,
+    DeviceAvailabilityReport,
+    DeviceStateReport,
+)
 
 logger = logging.getLogger(__name__)
 
 # Piezas de los temas, tal como estan en el contrato
 DEVICES_SEGMENT = "devices"
+BOARDS_SEGMENT = "boards"
 TOPIC_SET = "set"
 TOPIC_STATE = "state"
 TOPIC_AVAILABILITY = "availability"
@@ -34,10 +39,13 @@ SINGLE_LEVEL_WILDCARD = "+"
 
 # Campos del JSON del contrato
 FIELD_STATE = "state"
+FIELD_ACTION = "action"
+FIELD_HOLD_MS = "hold_ms"
 FIELD_TIMESTAMP = "ts_ms"
 
 _DEVICE_KEY_REGEX = re.compile(config.DEVICE_KEY_PATTERN)
 _DEVICE_TOPIC_PARTS = 2  # {device_key}/{tipo_de_tema}
+_BOARD_TOPIC_PARTS = 2   # {board_id}/{tipo_de_tema}
 
 
 def _devices_prefix() -> str:
@@ -45,11 +53,26 @@ def _devices_prefix() -> str:
     return f"{config.MQTT_TOPIC_ROOT}/{DEVICES_SEGMENT}"
 
 
+def _boards_prefix() -> str:
+    """Prefijo comun de los temas de las placas ESP32."""
+    return f"{config.MQTT_TOPIC_ROOT}/{BOARDS_SEGMENT}"
+
+
 # ─── Temas que el backend publica ────────────────────────────────────────
+
+def device_set_topic(device_key: str) -> str:
+    """Tema donde se le da una orden a un dispositivo (luz o puerta)."""
+    return f"{_devices_prefix()}/{device_key}/{TOPIC_SET}"
+
 
 def light_set_topic(device_key: str) -> str:
     """Tema donde se pide encender o apagar una luz."""
-    return f"{_devices_prefix()}/{device_key}/{TOPIC_SET}"
+    return device_set_topic(device_key)
+
+
+def door_set_topic(device_key: str) -> str:
+    """Tema donde se pide abrir o cerrar una puerta."""
+    return device_set_topic(device_key)
 
 
 # ─── Temas a los que el backend se suscribe ──────────────────────────────
@@ -62,6 +85,39 @@ def state_subscription_topic() -> str:
 def availability_subscription_topic() -> str:
     """Filtro que recibe online/offline de TODOS los dispositivos."""
     return f"{_devices_prefix()}/{SINGLE_LEVEL_WILDCARD}/{TOPIC_AVAILABILITY}"
+
+
+def board_availability_subscription_topic() -> str:
+    """Filtro que recibe online/offline de TODAS las placas (contrato v0.3)."""
+    return f"{_boards_prefix()}/{SINGLE_LEVEL_WILDCARD}/{TOPIC_AVAILABILITY}"
+
+
+def parse_board_topic(topic: str) -> Optional[tuple[str, str]]:
+    """
+    Separa un tema de placa en (board_id, tipo_de_tema).
+
+    Ejemplo:
+        'inclusive/casa1/boards/casa/availability' -> ('casa', 'availability')
+
+    Returns:
+        La pareja, o None si el tema no es de una placa o esta mal formado.
+    """
+    prefix = _boards_prefix() + "/"
+
+    if not topic.startswith(prefix):
+        return None
+
+    parts = topic[len(prefix):].split("/")
+
+    if len(parts) != _BOARD_TOPIC_PARTS:
+        return None
+
+    board_id, topic_kind = parts
+
+    if not _DEVICE_KEY_REGEX.match(board_id):
+        return None
+
+    return board_id, topic_kind
 
 
 def parse_device_topic(topic: str) -> Optional[tuple[str, str]]:
@@ -105,6 +161,24 @@ def encode_light_command(state: str) -> bytes:
     return json.dumps({FIELD_STATE: state}, separators=(",", ":")).encode("utf-8")
 
 
+def encode_door_command(action: str, hold_ms: Optional[int] = None) -> bytes:
+    """
+    Construye el JSON de la orden para una puerta.
+
+    Ejemplos:
+        {"action":"open","hold_ms":10000}   |   {"action":"close"}
+
+    El campo hold_ms solo viaja si se indico: si falta, el ESP32 usa su
+    valor por defecto (contrato).
+    """
+    payload: dict = {FIELD_ACTION: action}
+
+    if hold_ms is not None:
+        payload[FIELD_HOLD_MS] = hold_ms
+
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+
 def decode_state_payload(device_key: str, payload: bytes) -> Optional[DeviceStateReport]:
     """
     Convierte el JSON de estado que publica un ESP32 en un reporte.
@@ -139,26 +213,40 @@ def decode_state_payload(device_key: str, payload: bytes) -> Optional[DeviceStat
     )
 
 
-def decode_availability_payload(
-    device_key: str, payload: bytes
-) -> Optional[DeviceAvailabilityReport]:
+def _parse_online_text(source: str, payload: bytes) -> Optional[bool]:
     """
-    Convierte el texto 'online' u 'offline' en un reporte de conexion.
+    Interpreta el texto 'online'/'offline' (comun a dispositivos y placas).
 
     Returns:
-        El reporte, o None si el texto no es ninguno de los dos.
+        True/False, o None (con aviso en el log) si el texto no es valido.
     """
     try:
         text = payload.decode("utf-8").strip().lower()
     except UnicodeDecodeError:
-        logger.warning("Disponibilidad ignorada de '%s': texto ilegible.", device_key)
+        logger.warning("Disponibilidad ignorada de '%s': texto ilegible.", source)
         return None
 
     if text == config.AVAILABILITY_ONLINE:
-        return DeviceAvailabilityReport(device_key=device_key, online=True)
+        return True
 
     if text == config.AVAILABILITY_OFFLINE:
-        return DeviceAvailabilityReport(device_key=device_key, online=False)
+        return False
 
-    logger.warning("Disponibilidad ignorada de '%s': valor '%s'.", device_key, text)
+    logger.warning("Disponibilidad ignorada de '%s': valor '%s'.", source, text)
     return None
+
+
+def decode_availability_payload(
+    device_key: str, payload: bytes
+) -> Optional[DeviceAvailabilityReport]:
+    """Convierte 'online'/'offline' de un dispositivo en un reporte (o None si es invalido)."""
+    online = _parse_online_text(device_key, payload)
+    return None if online is None else DeviceAvailabilityReport(device_key=device_key, online=online)
+
+
+def decode_board_availability_payload(
+    board_id: str, payload: bytes
+) -> Optional[BoardAvailabilityReport]:
+    """Convierte 'online'/'offline' de una placa en un reporte (o None si es invalido)."""
+    online = _parse_online_text(board_id, payload)
+    return None if online is None else BoardAvailabilityReport(board_id=board_id, online=online)

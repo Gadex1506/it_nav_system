@@ -59,6 +59,7 @@ def start_gateway() -> None:
     gateway = get_device_gateway()
     gateway.set_state_listener(_state_store.update_state)
     gateway.set_availability_listener(_state_store.update_availability)
+    gateway.set_board_availability_listener(_state_store.update_board_availability)
     gateway.start()
 
 
