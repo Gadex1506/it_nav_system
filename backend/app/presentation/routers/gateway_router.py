@@ -12,17 +12,19 @@ DeviceControlService directamente o a un endpoint de usuario propio.
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.application.device_control_service import DeviceControlService
+from app.config import ORDER_PROBLEM_VISIBLE_SECONDS
 from app.application.device_state_store import DeviceLiveStatus
 from app.domain.exceptions import DeviceNotFoundError, GatewayUnavailableError
-from app.infrastructure.gateway_provider import get_device_gateway, get_state_store
+from app.infrastructure.gateway_provider import get_device_gateway, get_order_tracker, get_state_store
 from app.presentation.routers.dev_router import get_device_service
 from app.presentation.gateway_schemas import (
     DeviceLiveStatusResponse,
-    GatewayStatusResponse,
-    LightCommandRequest,
-    LightCommandResponse,
     DoorCommandRequest,
     DoorCommandResponse,
+    GatewayStatusResponse,
+    OrderReportResponse,
+    LightCommandRequest,
+    LightCommandResponse,
 )
 from app.presentation.security import require_dev_key
 
@@ -39,15 +41,32 @@ def get_device_control_service() -> DeviceControlService:
         device_service=get_device_service(),
         gateway=get_device_gateway(),
         state_store=get_state_store(),
+        order_tracker=get_order_tracker(),
     )
 
 
-def _to_response(live: DeviceLiveStatus) -> DeviceLiveStatusResponse:
+def to_order_response(order) -> OrderReportResponse:
+    """Convierte el resultado de una orden al formato de la API (tambien lo usa el router de usuario)."""
+    return OrderReportResponse(
+        order_id=order.order_id,
+        device_key=order.device_key,
+        requested=order.requested,
+        outcome=order.outcome.value,
+        sent_at=order.sent_at.isoformat(),
+        reported_state=order.reported_state,
+        detail=order.detail,
+    )
+
+
+def _to_response(live: DeviceLiveStatus, service: DeviceControlService) -> DeviceLiveStatusResponse:
+    last_order = service.get_last_order(live.device_key)
+
     return DeviceLiveStatusResponse(
         device_key=live.device_key,
         state=live.state,
         online=live.online,
         last_update=live.last_update.isoformat() if live.last_update else None,
+        last_order=to_order_response(last_order) if last_order else None,
     )
 
 
@@ -85,6 +104,7 @@ async def set_light(
         message="Orden enviada. El estado real lo confirmara el dispositivo.",
     )
 
+
 @router.post(
     "/doors/{device_key}",
     response_model=DoorCommandResponse,
@@ -96,7 +116,11 @@ async def set_door(
     request: DoorCommandRequest,
     service: DeviceControlService = Depends(get_device_control_service),
 ) -> DoorCommandResponse:
-    """Envia la orden. 202 = la orden salio; el estado real lo confirma el dispositivo."""
+    """
+    Envia la orden. Responde 202 (aceptada): la orden salio hacia el broker,
+    no que la puerta ya se movio. El estado real (opening, open, closing,
+    closed) aparece en GET /dev/gateway/devices/{device_key}/status.
+    """
     try:
         device = service.set_door(device_key, request.action, request.hold_ms)
 
@@ -116,6 +140,7 @@ async def set_door(
         message="Orden enviada. El estado real lo confirmara el dispositivo.",
     )
 
+
 @router.get(
     "/status",
     response_model=GatewayStatusResponse,
@@ -127,7 +152,7 @@ async def get_gateway_status(
     """Indica si hay conexion con el broker y lista el ultimo estado conocido."""
     return GatewayStatusResponse(
         connected=service.gateway_connected,
-        devices=[_to_response(live) for live in service.get_all_live_status()],
+        devices=[_to_response(live, service) for live in service.get_all_live_status()],
     )
 
 
@@ -149,4 +174,19 @@ async def get_device_status(
             detail=f"El dispositivo '{device_key}' aun no ha reportado su estado.",
         )
 
-    return _to_response(live)
+    return _to_response(live, service)
+
+
+@router.get(
+    "/orders/problems",
+    response_model=list[OrderReportResponse],
+    summary="Ordenes recientes sin respuesta o con estado distinto al pedido",
+)
+async def get_order_problems(
+    service: DeviceControlService = Depends(get_device_control_service),
+) -> list[OrderReportResponse]:
+    """Lo mismo que consulta Unity, pero protegido con la clave de desarrollador."""
+    return [
+        to_order_response(order)
+        for order in service.get_recent_order_problems(ORDER_PROBLEM_VISIBLE_SECONDS)
+    ]

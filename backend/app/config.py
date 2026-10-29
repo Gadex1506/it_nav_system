@@ -42,6 +42,12 @@ ROLE_USER: str = "user"
 NODE_STATUS_ACTIVE: str = "active"
 NODE_STATUS_INACTIVE: str = "inactive"
 
+# ─── Servidor HTTP ─────────────────────────────────────────────────────
+# Por defecto escucha SOLO en este equipo: los endpoints de usuario no piden clave.
+# Para exponerlo en la red (no recomendado) define INCLUSIVE_API_HOST=0.0.0.0 en el .env.
+API_HOST: str = os.getenv("INCLUSIVE_API_HOST", "127.0.0.1")
+API_PORT: int = 8001
+
 # ─── Direccion del panel de administracion ─────────────────────────────────────
 ADMIN_PANEL_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -71,6 +77,24 @@ DOOR_ACTION_CLOSE: str = "close"
 VALID_DOOR_ACTIONS: tuple = (DOOR_ACTION_OPEN, DOOR_ACTION_CLOSE)
 DOOR_HOLD_MS_MIN: int = 1000   # hold_ms = cierre de seguridad; menos de 1 s es casi seguro un error de tipeo
 DOOR_HOLD_MS_MAX: int = 60000  # mas de 1 minuto abierta ya no es "seguro", es un olvido
+
+# ─── Seguimiento de ordenes: cuanto esperar el estado de vuelta (contrato v0.3) ──
+ORDER_TIMEOUT_LIGHT_SECONDS: float = 3.0    # Luz: si no llega el estado nuevo, "no respondio"
+ORDER_TIMEOUT_DOOR_SECONDS: float = 10.0    # Puerta (por confirmar con el hardware real)
+ORDER_PROBLEM_VISIBLE_SECONDS: float = 60.0 # Un problema solo se muestra este tiempo; despues se considera viejo
+# Estados de puerta (igual que el contrato MQTT)
+DOOR_STATE_CLOSED: str = "closed"
+DOOR_STATE_OPENING: str = "opening"
+DOOR_STATE_OPEN: str = "open"
+DOOR_STATE_CLOSING: str = "closing"
+DOOR_STATE_BLOCKED: str = "blocked"
+
+# Que estados confirman cada orden de puerta (el primero que llegue basta)
+DOOR_CONFIRMING_STATES: dict = {
+    DOOR_ACTION_OPEN: (DOOR_STATE_OPENING, DOOR_STATE_OPEN),
+    DOOR_ACTION_CLOSE: (DOOR_STATE_CLOSING, DOOR_STATE_CLOSED),
+}
+DOOR_FAILURE_STATES: tuple = (DOOR_STATE_BLOCKED,)  # Estados que significan "no pudo hacerlo"
 
 # ─── Disponibilidad de dispositivos (Last Will de MQTT) ──────────────────
 AVAILABILITY_ONLINE: str = "online"

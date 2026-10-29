@@ -93,10 +93,12 @@ def fake_gateway(monkeypatch):
     """
     from app.application.device_state_store import DeviceStateStore
     from app.infrastructure import gateway_provider
+    from app.application.order_tracker import OrderTracker
 
     fake = FakeDeviceGateway()
     monkeypatch.setattr(gateway_provider, "_gateway", fake)
     monkeypatch.setattr(gateway_provider, "_state_store", DeviceStateStore())
+    monkeypatch.setattr(gateway_provider, "_order_tracker", OrderTracker())
     return fake
 
 @pytest.fixture()

@@ -26,12 +26,13 @@ from app.infrastructure.dev_key_store import dev_key_store
 from app.infrastructure.gateway_provider import start_gateway, stop_gateway
 
 # Config
-from app.config import ASSISTANT_NAME, ADMIN_PANEL_DIR
+from app.config import ASSISTANT_NAME, ADMIN_PANEL_DIR, API_HOST, API_PORT
 
 # # --- Importar Routers ------------------------------------------
 from app.presentation.routers.dev_router import router as dev_router
 from app.presentation.routers.user_router import router as user_router
 from app.presentation.routers.gateway_router import router as gateway_router
+from app.presentation.routers.user_device_router import router as user_device_router
 
 # =============================================================
 # Ciclo de vida de la aplicacion (Startup y Shutdown)
@@ -102,6 +103,7 @@ app.add_middleware(
 app.include_router(dev_router)
 app.include_router(user_router)
 app.include_router(gateway_router)
+app.include_router(user_device_router)
 
 # =============================================================
 # Endpoint de salud
@@ -136,7 +138,7 @@ app.mount("/", StaticFiles(directory=ADMIN_PANEL_DIR, html=True), name="panel")
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8001,
+        host=API_HOST,
+        port=API_PORT,
         reload=True,
     )

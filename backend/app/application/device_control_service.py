@@ -21,6 +21,12 @@ from typing import Optional
 
 from app.config import (
     DEVICE_TYPE_DOOR,
+    DOOR_CONFIRMING_STATES,
+    DOOR_FAILURE_STATES,
+    LIGHT_STATE_OFF,
+    LIGHT_STATE_ON,
+    ORDER_TIMEOUT_DOOR_SECONDS,
+    ORDER_TIMEOUT_LIGHT_SECONDS,
     DEVICE_TYPE_LIGHT,
     DOOR_ACTION_OPEN,
     DOOR_HOLD_MS_MAX,
@@ -30,6 +36,7 @@ from app.config import (
 )
 from app.application.device_service import DeviceService
 from app.application.device_state_store import DeviceLiveStatus, DeviceStateStore
+from app.application.order_tracker import OrderTracker
 from app.domain.exceptions import DeviceNotFoundError, GatewayUnavailableError
 from app.domain.interfaces import AbstractDeviceGateway
 from app.domain.models import Device
@@ -43,16 +50,20 @@ class DeviceControlService:
         device_service: DeviceService,
         gateway: AbstractDeviceGateway,
         state_store: DeviceStateStore,
+        order_tracker: Optional[OrderTracker] = None,
     ) -> None:
         """
         Args:
             device_service: Para buscar dispositivos por su device_key.
             gateway: Pasarela por la que salen las ordenes.
             state_store: Memoria con el ultimo estado conocido.
+            order_tracker: Seguimiento de ordenes (opcional: sin el, no se
+                detectan ordenes sin respuesta).
         """
         self._device_service = device_service
         self._gateway = gateway
         self._state_store = state_store
+        self._order_tracker = order_tracker
 
     @property
     def gateway_connected(self) -> bool:
@@ -79,6 +90,7 @@ class DeviceControlService:
         device = self._get_device(device_key, DEVICE_TYPE_LIGHT, "una luz")
 
         self._gateway.publish_light_command(device.device_key, normalized_state)
+        self._track_light_order(device.device_key, normalized_state)
         return device
 
     def set_door(self, device_key: str, action: str, hold_ms: Optional[int] = None) -> Device:
@@ -104,6 +116,7 @@ class DeviceControlService:
         device = self._get_device(device_key, DEVICE_TYPE_DOOR, "una puerta")
 
         self._gateway.publish_door_command(device.device_key, normalized_action, hold_ms)
+        self._track_door_order(device.device_key, normalized_action)
         return device
 
     def set_all_lights(self, house_id: int, state: str) -> list[str]:
@@ -130,6 +143,7 @@ class DeviceControlService:
 
         for light in lights:
             self._gateway.publish_light_command(light.device_key, normalized_state)
+            self._track_light_order(light.device_key, normalized_state)
 
         return [light.device_key for light in lights]
 
@@ -140,6 +154,43 @@ class DeviceControlService:
     def get_all_live_status(self) -> list[DeviceLiveStatus]:
         """Ultimo estado conocido de todos los dispositivos que han reportado."""
         return self._state_store.get_all()
+
+    # ─── Seguimiento de ordenes ──────────────────────────────────────────
+
+    def _track_light_order(self, device_key: str, state: str) -> None:
+        """Anota la orden de una luz: se confirma con el mismo estado; el opuesto es un fallo."""
+        if self._order_tracker is None:
+            return
+
+        opposite = LIGHT_STATE_OFF if state == LIGHT_STATE_ON else LIGHT_STATE_ON
+        self._order_tracker.register(
+            device_key, state, (state,), (opposite,), ORDER_TIMEOUT_LIGHT_SECONDS
+        )
+
+    def _track_door_order(self, device_key: str, action: str) -> None:
+        """Anota la orden de una puerta: la confirma el primer estado esperado."""
+        if self._order_tracker is None:
+            return
+
+        self._order_tracker.register(
+            device_key,
+            action,
+            DOOR_CONFIRMING_STATES[action],
+            DOOR_FAILURE_STATES,
+            ORDER_TIMEOUT_DOOR_SECONDS,
+        )
+
+    def get_last_order(self, device_key: str):
+        """Ultima orden de un dispositivo con su resultado, o None."""
+        if self._order_tracker is None:
+            return None
+        return self._order_tracker.get(device_key.strip().lower())
+
+    def get_recent_order_problems(self, max_age_seconds: float) -> list:
+        """Ordenes recientes sin respuesta o con estado distinto al pedido."""
+        if self._order_tracker is None:
+            return []
+        return self._order_tracker.get_recent_problems(max_age_seconds)
 
     # ─── Utilidades internas ─────────────────────────────────────────────
 

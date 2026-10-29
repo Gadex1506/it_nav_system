@@ -17,6 +17,8 @@ from typing import Optional
 
 from app import config
 from app.application.device_state_store import DeviceStateStore
+from app.application.order_tracker import OrderTracker
+from app.domain.device_events import DeviceStateReport
 from app.domain.interfaces import AbstractDeviceGateway
 from app.infrastructure.mqtt_device_gateway import MqttDeviceGateway
 from app.infrastructure.mqtt_settings import load_mqtt_settings
@@ -24,6 +26,7 @@ from app.infrastructure.offline_device_gateway import OfflineDeviceGateway
 
 _gateway: Optional[AbstractDeviceGateway] = None
 _state_store: DeviceStateStore = DeviceStateStore()
+_order_tracker: OrderTracker = OrderTracker()
 
 
 def _build_gateway() -> AbstractDeviceGateway:
@@ -49,6 +52,24 @@ def get_state_store() -> DeviceStateStore:
     return _state_store
 
 
+def get_order_tracker() -> OrderTracker:
+    """Devuelve el seguimiento unico de ordenes."""
+    return _order_tracker
+
+
+def _handle_state_report(report: DeviceStateReport) -> None:
+    """
+    Reparte cada estado que llega del dispositivo a quien lo necesita.
+
+    Patron Observer sencillo: el almacen guarda el estado y el seguimiento
+    de ordenes decide si con el se cumplio la ultima orden. Se leen los
+    objetos del modulo al momento de llamar (no al registrar) para que las
+    pruebas puedan reemplazarlos.
+    """
+    _state_store.update_state(report)
+    _order_tracker.on_state(report)
+
+
 def start_gateway() -> None:
     """
     Conecta la pasarela y la enlaza con el almacen de estados.
@@ -57,7 +78,7 @@ def start_gateway() -> None:
     apagado: el backend debe poder arrancar sin la maqueta.
     """
     gateway = get_device_gateway()
-    gateway.set_state_listener(_state_store.update_state)
+    gateway.set_state_listener(_handle_state_report)
     gateway.set_availability_listener(_state_store.update_availability)
     gateway.set_board_availability_listener(_state_store.update_board_availability)
     gateway.start()
